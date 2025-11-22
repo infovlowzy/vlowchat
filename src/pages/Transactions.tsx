@@ -6,17 +6,20 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MessageSquare, Globe, ExternalLink, Check, TrendingUp } from 'lucide-react';
-import { mockTransactions } from '@/lib/mockData';
 import { Channel } from '@/types';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { useTransactions } from '@/hooks/useTransactions';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Transactions() {
+  useAuth();
+  const { data: transactions = [], isLoading } = useTransactions();
   const [channelFilter, setChannelFilter] = useState<Channel | 'all'>('all');
   const { toast } = useToast();
 
-  const incomingTransactions = mockTransactions.filter(t => t.status !== 'handled');
-  const handledTransactions = mockTransactions.filter(t => t.status === 'handled');
+  const incomingTransactions = transactions.filter(t => t.status !== 'handled');
+  const handledTransactions = transactions.filter(t => t.status === 'handled');
 
   const filteredIncoming = channelFilter === 'all' 
     ? incomingTransactions 
@@ -54,10 +57,14 @@ export default function Transactions() {
   };
 
   const todayHandled = handledTransactions.filter(t => {
+    if (!t.handledAt) return false;
     const today = new Date();
-    const tDate = new Date(t.handledAt || t.timestamp);
-    return tDate.toDateString() === today.toDateString();
+    return t.handledAt.toDateString() === today.toDateString();
   }).length;
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
 
   return (
     <div className="space-y-6">

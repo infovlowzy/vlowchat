@@ -1,23 +1,27 @@
 import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, MessageSquare, Globe, Bot, User, AlertCircle } from 'lucide-react';
-import { mockChats, mockMessages } from '@/lib/mockData';
 import { ChatStatus, Channel } from '@/types';
 import { cn } from '@/lib/utils';
 import { ChatDetail } from '@/components/chats/ChatDetail';
+import { useChats } from '@/hooks/useChats';
+import { useMessages } from '@/hooks/useMessages';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function Chats() {
+  useAuth();
+  const { data: chats = [], isLoading } = useChats();
   const [selectedTab, setSelectedTab] = useState<'all' | 'needs-action' | 'resolved'>('all');
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(mockChats[0]?.id || null);
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState<Channel | 'all'>('all');
+  const { data: messages = [] } = useMessages(selectedChatId);
 
-  const filteredChats = mockChats.filter(chat => {
+  const filteredChats = chats.filter(chat => {
     // Tab filter
     if (selectedTab === 'needs-action' && chat.status !== 'needs_action') return false;
     if (selectedTab === 'resolved' && chat.status !== 'resolved') return false;
@@ -34,8 +38,11 @@ export default function Chats() {
     return true;
   });
 
-  const selectedChat = mockChats.find(c => c.id === selectedChatId);
-  const messages = selectedChatId ? mockMessages[selectedChatId] || [] : [];
+  const selectedChat = chats.find(c => c.id === selectedChatId);
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+  }
 
   return (
     <div className="h-[calc(100vh-2rem)] flex gap-4">
@@ -104,9 +111,9 @@ export default function Chats() {
               <TabsTrigger value="all" className="flex-1">All Chats</TabsTrigger>
               <TabsTrigger value="needs-action" className="flex-1">
                 Needs Action
-                {mockChats.filter(c => c.status === 'needs_action').length > 0 && (
+                {chats.filter(c => c.status === 'needs_action').length > 0 && (
                   <Badge variant="secondary" className="ml-1.5 h-5 px-1.5">
-                    {mockChats.filter(c => c.status === 'needs_action').length}
+                    {chats.filter(c => c.status === 'needs_action').length}
                   </Badge>
                 )}
               </TabsTrigger>

@@ -1,12 +1,30 @@
-import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MessageSquare, AlertCircle, Receipt, TrendingUp, Activity, CheckCircle2 } from 'lucide-react';
-import { mockDashboardStats, mockBusiness } from '@/lib/mockData';
+import { mockDashboardStats } from '@/lib/mockData';
+import { useAuth } from '@/hooks/useAuth';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 
 export default function Home() {
+  const { user } = useAuth();
   const navigate = useNavigate();
+
+  const { data: profile } = useQuery({
+    queryKey: ["profile", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return null;
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", user.id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!user?.id,
+  });
+
   const stats = mockDashboardStats;
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { 
@@ -47,7 +65,7 @@ export default function Home() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Welcome, {mockBusiness.name}</h1>
+        <h1 className="text-3xl font-bold">Welcome, {profile?.business_name || 'User'}</h1>
         <p className="text-muted-foreground mt-1">{dateStr} (WIB)</p>
         <p className="text-sm text-muted-foreground mt-2">
           Monitor chats, human interventions, and payment flows powered by Vlowchat AI.
