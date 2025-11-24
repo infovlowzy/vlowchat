@@ -60,8 +60,8 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
                 {chat.customerName.charAt(0)}
               </span>
             </div>
-            <div>
-              <h3 className="font-semibold">{chat.customerName}</h3>
+            <div className="min-w-0 flex-1">
+              <h3 className="font-semibold truncate">{chat.customerName}</h3>
               <div className="flex items-center gap-2 mt-0.5">
                 <ChannelIcon className={cn(
                   'w-3.5 h-3.5',
