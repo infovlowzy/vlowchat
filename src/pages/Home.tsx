@@ -312,6 +312,37 @@ export default function Home() {
           </Card>
         </div>
       </div>
+
+      {/* Key Insights */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Key Insights
+          </CardTitle>
+          <CardDescription>Performance metrics for {getWeekLabel(selectedWeek).toLowerCase()}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Peak hours</p>
+              <p className="text-2xl font-bold">2pm - 4pm</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Avg. response time</p>
+              <p className="text-2xl font-bold">2.5 mins</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Resolution rate</p>
+              <p className="text-2xl font-bold">94%</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Customer satisfaction</p>
+              <p className="text-2xl font-bold">4.8/5.0</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
