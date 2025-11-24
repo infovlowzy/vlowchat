@@ -1,19 +1,23 @@
+import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, AlertCircle, Receipt, TrendingUp, Activity, CheckCircle2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { MessageSquare, AlertCircle, Receipt, TrendingUp, Activity, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { mockDashboardStats } from '@/lib/mockData';
-import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 export default function Home() {
-  const { user } = useAuth();
   const navigate = useNavigate();
+  const [chartType, setChartType] = useState<'line' | 'bar'>('line');
+  const [selectedWeek, setSelectedWeek] = useState(0); // 0 = current week, -1 = last week, etc.
 
   const { data: profile } = useQuery({
-    queryKey: ["profile", user?.id],
+    queryKey: ["profile"],
     queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user?.id) return null;
       const { data } = await supabase
         .from("profiles")
@@ -22,7 +26,6 @@ export default function Home() {
         .maybeSingle();
       return data;
     },
-    enabled: !!user?.id,
   });
 
   const stats = mockDashboardStats;
@@ -34,6 +37,34 @@ export default function Home() {
     day: 'numeric',
     timeZone: 'Asia/Jakarta'
   });
+
+  // Generate weekly data based on selected week
+  const getWeekData = (weekOffset: number) => {
+    const baseData = [
+      { day: 'Mon', date: '18/11', count: 45 },
+      { day: 'Tue', date: '19/11', count: 52 },
+      { day: 'Wed', date: '20/11', count: 38 },
+      { day: 'Thu', date: '21/11', count: 65 },
+      { day: 'Fri', date: '22/11', count: 48 },
+      { day: 'Sat', date: '23/11', count: 34 },
+      { day: 'Sun', date: '24/11', count: 28 },
+    ];
+    
+    // Adjust data based on week offset
+    const multiplier = 1 + (weekOffset * 0.15);
+    return baseData.map(item => ({
+      ...item,
+      count: Math.max(10, Math.floor(item.count * multiplier))
+    }));
+  };
+
+  const weekData = getWeekData(selectedWeek);
+  
+  const getWeekLabel = (offset: number) => {
+    if (offset === 0) return 'This Week';
+    if (offset === -1) return 'Last Week';
+    return `${Math.abs(offset)} Weeks Ago`;
+  };
 
   const kpiCards = [
     {
@@ -99,37 +130,109 @@ export default function Home() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Chats This Week Chart */}
+        {/* Analytics Chart */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5" />
-              Chats This Week
-            </CardTitle>
-            <CardDescription>Daily conversation volume</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5" />
+                  Chats Analytics
+                </CardTitle>
+                <CardDescription>{getWeekLabel(selectedWeek)} - Daily conversation volume</CardDescription>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setChartType(chartType === 'line' ? 'bar' : 'line')}
+                >
+                  {chartType === 'line' ? 'Bar' : 'Line'}
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {stats.chatsThisWeek.map((day, index) => {
-                const maxCount = Math.max(...stats.chatsThisWeek.map(d => d.count));
-                const width = (day.count / maxCount) * 100;
-                
-                return (
-                  <div key={index} className="space-y-1">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground w-12">{day.date}</span>
-                      <span className="font-medium">{day.count}</span>
-                    </div>
-                    <div className="w-full bg-muted rounded-full h-2">
-                      <div 
-                        className="bg-primary h-2 rounded-full transition-all"
-                        style={{ width: `${width}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="flex items-center justify-between mb-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedWeek(selectedWeek - 1)}
+                disabled={selectedWeek <= -4}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Previous
+              </Button>
+              <span className="text-sm font-medium">{getWeekLabel(selectedWeek)}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSelectedWeek(selectedWeek + 1)}
+                disabled={selectedWeek >= 0}
+              >
+                Next
+                <ChevronRight className="w-4 h-4" />
+              </Button>
             </div>
+            <ResponsiveContainer width="100%" height={250}>
+              {chartType === 'line' ? (
+                <LineChart data={weekData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis 
+                    dataKey="date" 
+                    className="text-xs"
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  />
+                  <YAxis 
+                    className="text-xs"
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--background))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    dataKey="count" 
+                    stroke="hsl(var(--primary))" 
+                    strokeWidth={2}
+                    name="Chats"
+                    dot={{ fill: 'hsl(var(--primary))' }}
+                  />
+                </LineChart>
+              ) : (
+                <BarChart data={weekData}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis 
+                    dataKey="date" 
+                    className="text-xs"
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  />
+                  <YAxis 
+                    className="text-xs"
+                    tick={{ fill: 'hsl(var(--muted-foreground))' }}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'hsl(var(--background))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px'
+                    }}
+                  />
+                  <Legend />
+                  <Bar 
+                    dataKey="count" 
+                    fill="hsl(var(--primary))"
+                    name="Chats"
+                    radius={[8, 8, 0, 0]}
+                  />
+                </BarChart>
+              )}
+            </ResponsiveContainer>
           </CardContent>
         </Card>
 

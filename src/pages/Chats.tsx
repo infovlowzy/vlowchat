@@ -10,10 +10,8 @@ import { cn } from '@/lib/utils';
 import { ChatDetail } from '@/components/chats/ChatDetail';
 import { useChats } from '@/hooks/useChats';
 import { useMessages } from '@/hooks/useMessages';
-import { useAuth } from '@/hooks/useAuth';
 
 export default function Chats() {
-  useAuth();
   const { data: chats = [], isLoading } = useChats();
   const [selectedTab, setSelectedTab] = useState<'all' | 'needs-action' | 'resolved'>('all');
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
