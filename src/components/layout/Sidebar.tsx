@@ -22,7 +22,7 @@ export function Sidebar({ collapsed, onToggle, unreadChats, pendingTransactions 
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 h-screen bg-card border-r border-border transition-all duration-300 flex flex-col',
+        'fixed left-0 top-0 h-screen bg-card border-r border-border transition-all duration-300 flex flex-col z-50',
         collapsed ? 'w-16' : 'w-60'
       )}
     >
