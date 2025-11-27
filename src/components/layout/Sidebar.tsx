@@ -30,7 +30,7 @@ export function Sidebar({ collapsed, onToggle, unreadChats, pendingTransactions 
       <div className="h-16 flex items-center justify-between px-4 border-b border-border">
         {!collapsed && (
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden">
               <img
                 src="/logo.png"
                 alt="Vlowzy AI"
