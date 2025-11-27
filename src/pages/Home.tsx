@@ -4,7 +4,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { MessageSquare, AlertCircle, Receipt, TrendingUp, Activity, CheckCircle2, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
-import { mockDashboardStats } from '@/lib/mockData';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
@@ -32,7 +31,54 @@ export default function Home() {
     },
   });
 
-  const stats = mockDashboardStats;
+  // Fetch real chat data based on view type and period
+  const { data: chatData } = useQuery({
+    queryKey: ["analytics", viewType, selectedPeriod],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) return [];
+
+      let startDate: Date;
+      let endDate: Date;
+      const now = new Date();
+
+      // Calculate date range based on view type and selected period
+      if (viewType === 'daily') {
+        // For daily view, show last 24 hours in 4-hour chunks
+        const daysOffset = Math.abs(selectedPeriod);
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - daysOffset);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 1);
+      } else if (viewType === 'weekly') {
+        // For weekly view, show 7 days
+        const weeksOffset = Math.abs(selectedPeriod);
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - (weeksOffset * 7) - 6);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now);
+        endDate.setDate(endDate.getDate() - (weeksOffset * 7) + 1);
+        endDate.setHours(0, 0, 0, 0);
+      } else {
+        // For monthly view, show 12 months
+        const yearsOffset = Math.abs(selectedPeriod);
+        startDate = new Date(now.getFullYear() - yearsOffset, 0, 1);
+        endDate = new Date(now.getFullYear() - yearsOffset + 1, 0, 1);
+      }
+
+      const { data } = await supabase
+        .from("chats")
+        .select("created_at")
+        .eq("user_id", user.id)
+        .gte("created_at", startDate.toISOString())
+        .lt("created_at", endDate.toISOString())
+        .order("created_at", { ascending: true });
+
+      return data || [];
+    },
+  });
+
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-US', { 
     weekday: 'long', 
@@ -42,65 +88,169 @@ export default function Home() {
     timeZone: 'Asia/Jakarta'
   });
 
-  // Generate data based on view type and period offset
-  const getChartData = (type: ViewType, periodOffset: number) => {
-    if (type === 'daily') {
-      const baseData = [
-        { label: '00:00', count: 12 },
-        { label: '04:00', count: 8 },
-        { label: '08:00', count: 35 },
-        { label: '12:00', count: 58 },
-        { label: '16:00', count: 67 },
-        { label: '20:00', count: 42 },
-      ];
-      const multiplier = 1 + (periodOffset * 0.2);
-      return baseData.map(item => ({
-        ...item,
-        count: Math.max(5, Math.floor(item.count * multiplier))
-      }));
-    } else if (type === 'weekly') {
-      const baseData = [
-        { label: 'Mon', count: 45 },
-        { label: 'Tue', count: 52 },
-        { label: 'Wed', count: 38 },
-        { label: 'Thu', count: 65 },
-        { label: 'Fri', count: 48 },
-        { label: 'Sat', count: 34 },
-        { label: 'Sun', count: 28 },
-      ];
-      const multiplier = 1 + (periodOffset * 0.15);
-      return baseData.map(item => ({
-        ...item,
-        count: Math.max(10, Math.floor(item.count * multiplier))
+  // Fetch real-time stats
+  const { data: stats } = useQuery({
+    queryKey: ["dashboard-stats"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) return null;
+
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+      // Get today's chats
+      const { count: todayCount } = await supabase
+        .from("chats")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("created_at", todayStart.toISOString());
+
+      // Get chats needing action
+      const { count: needsActionCount } = await supabase
+        .from("chats")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("status", "needs_action");
+
+      // Get payment alerts
+      const { count: paymentCount } = await supabase
+        .from("chats")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("payment_related", true)
+        .eq("status", "needs_action");
+
+      return {
+        todayChats: todayCount || 0,
+        needsActionChats: needsActionCount || 0,
+        paymentAlerts: paymentCount || 0,
+      };
+    },
+  });
+
+  // Process real data into chart format
+  const processChartData = () => {
+    if (!chatData) return [];
+
+    const aggregated: { [key: string]: number } = {};
+
+    if (viewType === 'daily') {
+      // Group by 4-hour intervals
+      const intervals = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'];
+      intervals.forEach(interval => aggregated[interval] = 0);
+
+      chatData.forEach(chat => {
+        const date = new Date(chat.created_at);
+        const hour = date.getHours();
+        const intervalKey = intervals[Math.floor(hour / 4)];
+        aggregated[intervalKey]++;
+      });
+
+      return intervals.map(label => ({ label, count: aggregated[label] }));
+    } else if (viewType === 'weekly') {
+      // Group by day of week
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      days.forEach(day => aggregated[day] = 0);
+
+      chatData.forEach(chat => {
+        const date = new Date(chat.created_at);
+        const dayName = days[date.getDay()];
+        aggregated[dayName]++;
+      });
+
+      // Reorder to start from Monday
+      return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(label => ({
+        label,
+        count: aggregated[label]
       }));
     } else {
-      const baseData = [
-        { label: 'Jan', count: 320 },
-        { label: 'Feb', count: 380 },
-        { label: 'Mar', count: 450 },
-        { label: 'Apr', count: 420 },
-        { label: 'May', count: 490 },
-        { label: 'Jun', count: 520 },
-        { label: 'Jul', count: 480 },
-        { label: 'Aug', count: 510 },
-        { label: 'Sep', count: 540 },
-        { label: 'Oct', count: 560 },
-        { label: 'Nov', count: 580 },
-        { label: 'Dec', count: 600 },
-      ];
-      const multiplier = 1 + (periodOffset * 0.1);
-      return baseData.map(item => ({
-        ...item,
-        count: Math.max(50, Math.floor(item.count * multiplier))
-      }));
+      // Group by month
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      months.forEach(month => aggregated[month] = 0);
+
+      chatData.forEach(chat => {
+        const date = new Date(chat.created_at);
+        const monthName = months[date.getMonth()];
+        aggregated[monthName]++;
+      });
+
+      return months.map(label => ({ label, count: aggregated[label] }));
     }
   };
 
-  const chartData = getChartData(viewType, selectedPeriod);
-  const previousPeriodData = getChartData(viewType, selectedPeriod - 1);
-  
-  const currentTotal = chartData.reduce((sum, item) => sum + item.count, 0);
-  const previousTotal = previousPeriodData.reduce((sum, item) => sum + item.count, 0);
+  const chartDataProcessed = processChartData();
+
+  const kpiCards = [
+    {
+      title: "Today's Chats",
+      value: stats?.todayChats || 0,
+      icon: MessageSquare,
+      color: 'text-primary',
+      bgColor: 'bg-primary/10',
+      onClick: () => navigate('/chats')
+    },
+    {
+      title: 'Needs Action',
+      value: stats?.needsActionChats || 0,
+      icon: AlertCircle,
+      color: 'text-accent',
+      bgColor: 'bg-accent/10',
+      onClick: () => navigate('/chats?tab=needs-action')
+    },
+    {
+      title: 'Payment Alerts',
+      value: stats?.paymentAlerts || 0,
+      icon: Receipt,
+      color: 'text-warning',
+      bgColor: 'bg-warning/10',
+      onClick: () => navigate('/transactions')
+    }
+  ];
+
+  // Fetch previous period data for comparison
+  const { data: previousPeriodData } = useQuery({
+    queryKey: ["analytics-previous", viewType, selectedPeriod],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user?.id) return [];
+
+      let startDate: Date;
+      let endDate: Date;
+      const now = new Date();
+
+      if (viewType === 'daily') {
+        const daysOffset = Math.abs(selectedPeriod) + 1;
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - daysOffset);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 1);
+      } else if (viewType === 'weekly') {
+        const weeksOffset = Math.abs(selectedPeriod) + 1;
+        startDate = new Date(now);
+        startDate.setDate(startDate.getDate() - (weeksOffset * 7) - 6);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now);
+        endDate.setDate(endDate.getDate() - (weeksOffset * 7) + 1);
+        endDate.setHours(0, 0, 0, 0);
+      } else {
+        const yearsOffset = Math.abs(selectedPeriod) + 1;
+        startDate = new Date(now.getFullYear() - yearsOffset, 0, 1);
+        endDate = new Date(now.getFullYear() - yearsOffset + 1, 0, 1);
+      }
+
+      const { data } = await supabase
+        .from("chats")
+        .select("created_at")
+        .eq("user_id", user.id)
+        .gte("created_at", startDate.toISOString())
+        .lt("created_at", endDate.toISOString());
+
+      return data || [];
+    },
+  });
+
+  const currentTotal = chartDataProcessed.reduce((sum, item) => sum + item.count, 0);
+  const previousTotal = previousPeriodData?.length || 0;
   const percentageChange = previousTotal > 0 ? ((currentTotal - previousTotal) / previousTotal) * 100 : 0;
   
   const getPeriodLabel = (offset: number) => {
@@ -124,33 +274,6 @@ export default function Home() {
     if (viewType === 'weekly') return -4;
     return -3;
   };
-
-  const kpiCards = [
-    {
-      title: "Today's Chats",
-      value: stats.todayChats,
-      icon: MessageSquare,
-      color: 'text-primary',
-      bgColor: 'bg-primary/10',
-      onClick: () => navigate('/chats')
-    },
-    {
-      title: 'Needs Action',
-      value: stats.needsActionChats,
-      icon: AlertCircle,
-      color: 'text-accent',
-      bgColor: 'bg-accent/10',
-      onClick: () => navigate('/chats?tab=needs-action')
-    },
-    {
-      title: 'Payment Alerts',
-      value: stats.paymentAlerts,
-      icon: Receipt,
-      color: 'text-warning',
-      bgColor: 'bg-warning/10',
-      onClick: () => navigate('/transactions')
-    }
-  ];
 
   return (
     <div className="space-y-6">
@@ -260,7 +383,7 @@ export default function Home() {
             </div>
             <ResponsiveContainer width="100%" height={250}>
               {chartType === 'line' ? (
-                <LineChart data={chartData}>
+                <LineChart data={chartDataProcessed}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis 
                     dataKey="label" 
@@ -289,7 +412,7 @@ export default function Home() {
                   />
                 </LineChart>
               ) : (
-                <BarChart data={chartData}>
+                <BarChart data={chartDataProcessed}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis 
                     dataKey="label" 
@@ -332,10 +455,10 @@ export default function Home() {
             <CardContent>
               <div className="space-y-2">
                 <Badge variant="secondary" className="text-sm">
-                  {stats.topIssue.label}
+                  Payment Confirmation
                 </Badge>
                 <p className="text-sm text-muted-foreground">
-                  {stats.topIssue.description}
+                  Most common issue requiring attention this week
                 </p>
               </div>
             </CardContent>
