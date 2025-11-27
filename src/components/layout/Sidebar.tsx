@@ -34,7 +34,7 @@ export function Sidebar({ collapsed, onToggle, unreadChats, pendingTransactions 
               <img
                 src="/logo.png"
                 alt="Vlowzy AI"
-                className="w-5 h-5 object-contain rounded-lg"
+                className="w-7 h-7 object-contain rounded-lg"
               />
             </div>
             <div>
