@@ -31,12 +31,12 @@ export function Sidebar({ collapsed, onToggle, unreadChats, pendingTransactions 
         {!collapsed && (
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center overflow-hidden">
-              <img
-                src="/logo.png"
-                alt="Vlowzy AI"
-                className="w-6 h-6 object-contain rounded-lg"
-              />
-            </div>
+                <img
+                  src="/logo.png"
+                  alt="Vlowzy AI"
+                  className="w-5 h-5 object-contain rounded-lg"  {/* Changed from w-6 h-6 */}
+                />
+              </div>
             <div>
               <h1 className="font-semibold text-sm">Vlowchat AI</h1>
               <p className="text-xs text-muted-foreground">by Vlowzy</p>
