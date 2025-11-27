@@ -81,8 +81,8 @@ export function Sidebar({ collapsed, onToggle, unreadChats, pendingTransactions 
       <div className="p-4 border-t border-border">
         {!collapsed && (
           <div className="text-xs text-muted-foreground text-center">
-            <p>Powered by Vlowzy</p>
-            <p className="mt-1">© 2024 All rights reserved</p>
+            <p>Powered by Vlowzy AI</p>
+            <p className="mt-1">© 2025 All rights reserved</p>
           </div>
         )}
       </div>
