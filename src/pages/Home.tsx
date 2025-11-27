@@ -2,17 +2,21 @@ import { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MessageSquare, AlertCircle, Receipt, TrendingUp, Activity, CheckCircle2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { MessageSquare, AlertCircle, Receipt, TrendingUp, Activity, CheckCircle2, ChevronLeft, ChevronRight, ArrowUp, ArrowDown } from 'lucide-react';
 import { mockDashboardStats } from '@/lib/mockData';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
+type ViewType = 'daily' | 'weekly' | 'monthly';
+
 export default function Home() {
   const navigate = useNavigate();
   const [chartType, setChartType] = useState<'line' | 'bar'>('line');
-  const [selectedWeek, setSelectedWeek] = useState(0); // 0 = current week, -1 = last week, etc.
+  const [viewType, setViewType] = useState<ViewType>('weekly');
+  const [selectedPeriod, setSelectedPeriod] = useState(0); // 0 = current period, -1 = last period, etc.
 
   const { data: profile } = useQuery({
     queryKey: ["profile"],
@@ -38,32 +42,87 @@ export default function Home() {
     timeZone: 'Asia/Jakarta'
   });
 
-  // Generate weekly data based on selected week
-  const getWeekData = (weekOffset: number) => {
-    const baseData = [
-      { day: 'Mon', date: '18/11', count: 45 },
-      { day: 'Tue', date: '19/11', count: 52 },
-      { day: 'Wed', date: '20/11', count: 38 },
-      { day: 'Thu', date: '21/11', count: 65 },
-      { day: 'Fri', date: '22/11', count: 48 },
-      { day: 'Sat', date: '23/11', count: 34 },
-      { day: 'Sun', date: '24/11', count: 28 },
-    ];
-    
-    // Adjust data based on week offset
-    const multiplier = 1 + (weekOffset * 0.15);
-    return baseData.map(item => ({
-      ...item,
-      count: Math.max(10, Math.floor(item.count * multiplier))
-    }));
+  // Generate data based on view type and period offset
+  const getChartData = (type: ViewType, periodOffset: number) => {
+    if (type === 'daily') {
+      const baseData = [
+        { label: '00:00', count: 12 },
+        { label: '04:00', count: 8 },
+        { label: '08:00', count: 35 },
+        { label: '12:00', count: 58 },
+        { label: '16:00', count: 67 },
+        { label: '20:00', count: 42 },
+      ];
+      const multiplier = 1 + (periodOffset * 0.2);
+      return baseData.map(item => ({
+        ...item,
+        count: Math.max(5, Math.floor(item.count * multiplier))
+      }));
+    } else if (type === 'weekly') {
+      const baseData = [
+        { label: 'Mon', count: 45 },
+        { label: 'Tue', count: 52 },
+        { label: 'Wed', count: 38 },
+        { label: 'Thu', count: 65 },
+        { label: 'Fri', count: 48 },
+        { label: 'Sat', count: 34 },
+        { label: 'Sun', count: 28 },
+      ];
+      const multiplier = 1 + (periodOffset * 0.15);
+      return baseData.map(item => ({
+        ...item,
+        count: Math.max(10, Math.floor(item.count * multiplier))
+      }));
+    } else {
+      const baseData = [
+        { label: 'Jan', count: 320 },
+        { label: 'Feb', count: 380 },
+        { label: 'Mar', count: 450 },
+        { label: 'Apr', count: 420 },
+        { label: 'May', count: 490 },
+        { label: 'Jun', count: 520 },
+        { label: 'Jul', count: 480 },
+        { label: 'Aug', count: 510 },
+        { label: 'Sep', count: 540 },
+        { label: 'Oct', count: 560 },
+        { label: 'Nov', count: 580 },
+        { label: 'Dec', count: 600 },
+      ];
+      const multiplier = 1 + (periodOffset * 0.1);
+      return baseData.map(item => ({
+        ...item,
+        count: Math.max(50, Math.floor(item.count * multiplier))
+      }));
+    }
   };
 
-  const weekData = getWeekData(selectedWeek);
+  const chartData = getChartData(viewType, selectedPeriod);
+  const previousPeriodData = getChartData(viewType, selectedPeriod - 1);
   
-  const getWeekLabel = (offset: number) => {
-    if (offset === 0) return 'This Week';
-    if (offset === -1) return 'Last Week';
-    return `${Math.abs(offset)} Weeks Ago`;
+  const currentTotal = chartData.reduce((sum, item) => sum + item.count, 0);
+  const previousTotal = previousPeriodData.reduce((sum, item) => sum + item.count, 0);
+  const percentageChange = previousTotal > 0 ? ((currentTotal - previousTotal) / previousTotal) * 100 : 0;
+  
+  const getPeriodLabel = (offset: number) => {
+    if (viewType === 'daily') {
+      if (offset === 0) return 'Today';
+      if (offset === -1) return 'Yesterday';
+      return `${Math.abs(offset)} Days Ago`;
+    } else if (viewType === 'weekly') {
+      if (offset === 0) return 'This Week';
+      if (offset === -1) return 'Last Week';
+      return `${Math.abs(offset)} Weeks Ago`;
+    } else {
+      if (offset === 0) return 'This Year';
+      if (offset === -1) return 'Last Year';
+      return `${Math.abs(offset)} Years Ago`;
+    }
+  };
+
+  const getMaxOffset = () => {
+    if (viewType === 'daily') return -7;
+    if (viewType === 'weekly') return -4;
+    return -3;
   };
 
   const kpiCards = [
@@ -133,15 +192,15 @@ export default function Home() {
         {/* Analytics Chart */}
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5" />
-                  Chats Analytics
-                </CardTitle>
-                <CardDescription>{getWeekLabel(selectedWeek)} - Daily conversation volume</CardDescription>
-              </div>
-              <div className="flex gap-2">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="w-5 h-5" />
+                    Chats Analytics
+                  </CardTitle>
+                  <CardDescription>{getPeriodLabel(selectedPeriod)} - Conversation volume</CardDescription>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
@@ -150,6 +209,31 @@ export default function Home() {
                   {chartType === 'line' ? 'Bar' : 'Line'}
                 </Button>
               </div>
+              
+              <div className="flex items-center justify-between">
+                <Tabs value={viewType} onValueChange={(v) => {
+                  setViewType(v as ViewType);
+                  setSelectedPeriod(0);
+                }}>
+                  <TabsList>
+                    <TabsTrigger value="daily">Daily</TabsTrigger>
+                    <TabsTrigger value="weekly">Weekly</TabsTrigger>
+                    <TabsTrigger value="monthly">Monthly</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+                
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">vs previous:</span>
+                  <Badge variant={percentageChange >= 0 ? "default" : "secondary"} className="gap-1">
+                    {percentageChange >= 0 ? (
+                      <ArrowUp className="w-3 h-3" />
+                    ) : (
+                      <ArrowDown className="w-3 h-3" />
+                    )}
+                    {Math.abs(percentageChange).toFixed(1)}%
+                  </Badge>
+                </div>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -157,18 +241,18 @@ export default function Home() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setSelectedWeek(selectedWeek - 1)}
-                disabled={selectedWeek <= -4}
+                onClick={() => setSelectedPeriod(selectedPeriod - 1)}
+                disabled={selectedPeriod <= getMaxOffset()}
               >
                 <ChevronLeft className="w-4 h-4" />
                 Previous
               </Button>
-              <span className="text-sm font-medium">{getWeekLabel(selectedWeek)}</span>
+              <span className="text-sm font-medium">{getPeriodLabel(selectedPeriod)}</span>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setSelectedWeek(selectedWeek + 1)}
-                disabled={selectedWeek >= 0}
+                onClick={() => setSelectedPeriod(selectedPeriod + 1)}
+                disabled={selectedPeriod >= 0}
               >
                 Next
                 <ChevronRight className="w-4 h-4" />
@@ -176,10 +260,10 @@ export default function Home() {
             </div>
             <ResponsiveContainer width="100%" height={250}>
               {chartType === 'line' ? (
-                <LineChart data={weekData}>
+                <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis 
-                    dataKey="date" 
+                    dataKey="label" 
                     className="text-xs"
                     tick={{ fill: 'hsl(var(--muted-foreground))' }}
                   />
@@ -205,10 +289,10 @@ export default function Home() {
                   />
                 </LineChart>
               ) : (
-                <BarChart data={weekData}>
+                <BarChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis 
-                    dataKey="date" 
+                    dataKey="label" 
                     className="text-xs"
                     tick={{ fill: 'hsl(var(--muted-foreground))' }}
                   />
@@ -320,7 +404,7 @@ export default function Home() {
             <TrendingUp className="w-5 h-5" />
             Key Insights
           </CardTitle>
-          <CardDescription>Performance metrics for {getWeekLabel(selectedWeek).toLowerCase()}</CardDescription>
+          <CardDescription>Performance metrics for {getPeriodLabel(selectedPeriod).toLowerCase()}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
