@@ -31,7 +31,11 @@ export function Sidebar({ collapsed, onToggle, unreadChats, pendingTransactions 
         {!collapsed && (
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <MessageSquare className="w-5 h-5 text-primary-foreground" />
+              <img
+                src="logo.png"
+                alt="Vlowzy AI"
+                className="w-6 h-6 object-contain rounded-lg"
+              />
             </div>
             <div>
               <h1 className="font-semibold text-sm">Vlowchat AI</h1>
