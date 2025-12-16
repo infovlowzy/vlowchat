@@ -1,66 +1,69 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MessageSquare, Globe, ExternalLink, Check, TrendingUp } from 'lucide-react';
-import { Channel } from '@/types';
+import { ExternalLink, Check, TrendingUp, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { useTransactions } from '@/hooks/useTransactions';
+import { useInvoices, useUpdateInvoiceStatus, useTodayPaidCount } from '@/hooks/useInvoices';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function Transactions() {
   useAuth();
-  const { data: transactions = [], isLoading } = useTransactions();
-  const [channelFilter, setChannelFilter] = useState<Channel | 'all'>('all');
+  const navigate = useNavigate();
   const { toast } = useToast();
+  
+  // Fetch incoming invoices (waiting for payment)
+  const { data: incomingInvoices = [], isLoading: loadingIncoming } = useInvoices('waiting_for_payment');
+  
+  // Fetch handled invoices (paid or approved)
+  const { data: handledInvoices = [], isLoading: loadingHandled } = useInvoices(['paid', 'approved']);
+  
+  // Get today's paid count
+  const { data: todayPaidCount = 0 } = useTodayPaidCount();
+  
+  const updateInvoiceStatus = useUpdateInvoiceStatus();
 
-  const incomingTransactions = transactions.filter(t => t.status !== 'handled');
-  const handledTransactions = transactions.filter(t => t.status === 'handled');
-
-  const filteredIncoming = channelFilter === 'all' 
-    ? incomingTransactions 
-    : incomingTransactions.filter(t => t.channel === channelFilter);
-    
-  const filteredHandled = channelFilter === 'all'
-    ? handledTransactions
-    : handledTransactions.filter(t => t.channel === channelFilter);
-
-  const handleMarkAsHandled = (id: string) => {
-    toast({
-      title: 'Transaction marked as handled',
-      description: 'The payment alert has been processed.'
-    });
+  const handleMarkAsHandled = async (invoiceId: string) => {
+    try {
+      await updateInvoiceStatus.mutateAsync({
+        invoiceId,
+        status: 'paid',
+      });
+      toast({
+        title: 'Invoice marked as paid',
+        description: 'The payment alert has been processed.'
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update invoice status',
+        variant: 'destructive'
+      });
+    }
   };
 
-  const handleOpenChat = () => {
-    toast({
-      title: 'Opening chat',
-      description: 'Navigating to conversation...'
-    });
+  const handleOpenChat = (chatId: string) => {
+    navigate(`/chats?chatId=${chatId}`);
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'awaiting_check':
-        return <Badge variant="secondary">Awaiting Check</Badge>;
-      case 'proof_received':
-        return <Badge className="bg-warning text-warning-foreground">Proof Received</Badge>;
-      case 'handled':
-        return <Badge className="bg-success text-success-foreground">Handled</Badge>;
+      case 'waiting_for_payment':
+        return <Badge variant="secondary">Awaiting Payment</Badge>;
+      case 'paid':
+        return <Badge className="bg-success text-success-foreground">Paid</Badge>;
+      case 'approved':
+        return <Badge className="bg-primary text-primary-foreground">Approved</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
   };
 
-  const todayHandled = handledTransactions.filter(t => {
-    if (!t.handledAt) return false;
-    const today = new Date();
-    return t.handledAt.toDateString() === today.toDateString();
-  }).length;
+  const isLoading = loadingIncoming || loadingHandled;
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
@@ -84,35 +87,19 @@ export default function Transactions() {
               </CardTitle>
               <CardDescription>Payments handled today</CardDescription>
             </div>
-            <div className="text-3xl font-bold">{todayHandled}</div>
+            <div className="text-3xl font-bold">{todayPaidCount}</div>
           </div>
         </CardHeader>
       </Card>
-
-      {/* Filters */}
-      <div className="flex items-center gap-3">
-        <div className="w-48">
-          <Select value={channelFilter} onValueChange={(v) => setChannelFilter(v as Channel | 'all')}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Channels</SelectItem>
-              <SelectItem value="whatsapp">WhatsApp</SelectItem>
-              <SelectItem value="web">Website</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
 
       {/* Tabs */}
       <Tabs defaultValue="incoming">
         <TabsList>
           <TabsTrigger value="incoming">
             Incoming
-            {filteredIncoming.length > 0 && (
+            {incomingInvoices.length > 0 && (
               <Badge variant="secondary" className="ml-2 h-5 px-1.5">
-                {filteredIncoming.length}
+                {incomingInvoices.length}
               </Badge>
             )}
           </TabsTrigger>
@@ -124,58 +111,56 @@ export default function Transactions() {
             <CardHeader>
               <CardTitle>Incoming Payment Alerts</CardTitle>
               <CardDescription>
-                Auto-detected payment conversations requiring attention
+                Invoices awaiting payment confirmation
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {filteredIncoming.length === 0 ? (
+              {incomingInvoices.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <Check className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No pending payment alerts</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {filteredIncoming.map((transaction) => {
-                    const ChannelIcon = transaction.channel === 'whatsapp' ? MessageSquare : Globe;
+                  {incomingInvoices.map((invoice) => {
+                    const contactName = invoice.contact?.display_name || invoice.contact?.phone_number || 'Unknown';
                     
                     return (
                       <div
-                        key={transaction.id}
+                        key={invoice.id}
                         className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
                       >
                         <div className="flex items-start gap-4 flex-1">
                           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                             <span className="text-sm font-medium text-primary">
-                              {transaction.customerName.charAt(0)}
+                              {contactName.charAt(0)}
                             </span>
                           </div>
                           
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="font-medium">{transaction.customerName}</span>
-                              <ChannelIcon className={cn(
-                                'w-4 h-4',
-                                transaction.channel === 'whatsapp' ? 'text-success' : 'text-primary'
-                              )} />
-                              <Badge variant="outline" className="text-xs">
-                                {transaction.keyword}
-                              </Badge>
+                              <span className="font-medium">{contactName}</span>
+                              {invoice.invoice_number && (
+                                <Badge variant="outline" className="text-xs">
+                                  {invoice.invoice_number}
+                                </Badge>
+                              )}
                             </div>
                             
                             <p className="text-sm text-muted-foreground mb-2">
-                              "{transaction.snippet}"
+                              Total: {invoice.currency_code || 'IDR'} {Number(invoice.total_amount).toLocaleString()}
                             </p>
                             
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
                               <span>
-                                {new Date(transaction.timestamp).toLocaleString('en-US', {
+                                {invoice.created_at && new Date(invoice.created_at).toLocaleString('en-US', {
                                   month: 'short',
                                   day: 'numeric',
                                   hour: '2-digit',
                                   minute: '2-digit'
                                 })}
                               </span>
-                              {getStatusBadge(transaction.status)}
+                              {getStatusBadge(invoice.status)}
                             </div>
                           </div>
                         </div>
@@ -184,17 +169,18 @@ export default function Transactions() {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={handleOpenChat}
+                            onClick={() => handleOpenChat(invoice.chat_id)}
                           >
                             <ExternalLink className="w-4 h-4 mr-2" />
                             Open Chat
                           </Button>
                           <Button
                             size="sm"
-                            onClick={() => handleMarkAsHandled(transaction.id)}
+                            onClick={() => handleMarkAsHandled(invoice.id)}
+                            disabled={updateInvoiceStatus.isPending}
                           >
                             <Check className="w-4 h-4 mr-2" />
-                            Mark as Handled
+                            Mark as Paid
                           </Button>
                         </div>
                       </div>
@@ -211,59 +197,56 @@ export default function Transactions() {
             <CardHeader>
               <CardTitle>Handled Transactions</CardTitle>
               <CardDescription>
-                Resolved payment alerts and their outcomes
+                Paid and approved invoices
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {filteredHandled.length === 0 ? (
+              {handledInvoices.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-50" />
                   <p>No handled transactions yet</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {filteredHandled.map((transaction) => {
-                    const ChannelIcon = transaction.channel === 'whatsapp' ? MessageSquare : Globe;
+                  {handledInvoices.map((invoice) => {
+                    const contactName = invoice.contact?.display_name || invoice.contact?.phone_number || 'Unknown';
                     
                     return (
                       <div
-                        key={transaction.id}
+                        key={invoice.id}
                         className="flex items-center justify-between p-4 rounded-lg border"
                       >
                         <div className="flex items-start gap-4 flex-1">
                           <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
                             <span className="text-sm font-medium">
-                              {transaction.customerName.charAt(0)}
+                              {contactName.charAt(0)}
                             </span>
                           </div>
                           
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
-                              <span className="font-medium">{transaction.customerName}</span>
-                              <ChannelIcon className={cn(
-                                'w-4 h-4',
-                                transaction.channel === 'whatsapp' ? 'text-success' : 'text-primary'
-                              )} />
-                              <Badge variant="outline" className="text-xs">
-                                {transaction.keyword}
-                              </Badge>
+                              <span className="font-medium">{contactName}</span>
+                              {invoice.invoice_number && (
+                                <Badge variant="outline" className="text-xs">
+                                  {invoice.invoice_number}
+                                </Badge>
+                              )}
                             </div>
                             
                             <p className="text-sm text-muted-foreground mb-2">
-                              "{transaction.snippet}"
+                              Total: {invoice.currency_code || 'IDR'} {Number(invoice.total_amount).toLocaleString()}
                             </p>
                             
                             <div className="flex items-center gap-3 text-xs text-muted-foreground">
                               <span>
-                                Handled by {transaction.handledBy} • {' '}
-                                {transaction.handledAt && new Date(transaction.handledAt).toLocaleString('en-US', {
+                                {invoice.updated_at && new Date(invoice.updated_at).toLocaleString('en-US', {
                                   month: 'short',
                                   day: 'numeric',
                                   hour: '2-digit',
                                   minute: '2-digit'
                                 })}
                               </span>
-                              {getStatusBadge(transaction.status)}
+                              {getStatusBadge(invoice.status)}
                             </div>
                           </div>
                         </div>
@@ -271,7 +254,7 @@ export default function Transactions() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={handleOpenChat}
+                          onClick={() => handleOpenChat(invoice.chat_id)}
                         >
                           <ExternalLink className="w-4 h-4 mr-2" />
                           View Chat
