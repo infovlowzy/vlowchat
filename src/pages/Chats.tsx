@@ -3,40 +3,36 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, MessageSquare, Globe, Bot, User, AlertCircle } from 'lucide-react';
-import { ChatStatus, Channel } from '@/types';
+import { Search, MessageSquare, Bot, User, AlertCircle } from 'lucide-react';
+import { ChatStatus } from '@/types';
 import { cn } from '@/lib/utils';
 import { ChatDetail } from '@/components/chats/ChatDetail';
 import { useChats } from '@/hooks/useChats';
 import { useMessages } from '@/hooks/useMessages';
 
+type TabValue = 'ai' | 'needs_action' | 'human' | 'resolved';
+
 export default function Chats() {
-  const { data: chats = [], isLoading } = useChats();
-  const [selectedTab, setSelectedTab] = useState<'all' | 'needs-action' | 'resolved'>('all');
+  const [selectedTab, setSelectedTab] = useState<TabValue>('needs_action');
+  const { data: chats = [], isLoading } = useChats(selectedTab as ChatStatus);
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [channelFilter, setChannelFilter] = useState<Channel | 'all'>('all');
   const { data: messages = [] } = useMessages(selectedChatId);
 
+  // Count for badges - fetch all chats to get counts
+  const { data: allChats = [] } = useChats();
+
   const filteredChats = chats.filter(chat => {
-    // Tab filter
-    if (selectedTab === 'needs-action' && chat.status !== 'needs_action') return false;
-    if (selectedTab === 'resolved' && chat.status !== 'resolved') return false;
-    
-    // Channel filter
-    if (channelFilter !== 'all' && chat.channel !== channelFilter) return false;
-    
-    // Search filter
-    if (searchQuery && !chat.customerName.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase())) {
-      return false;
-    }
-    
-    return true;
+    if (!searchQuery) return true;
+    const contactName = chat.contact?.display_name || chat.contact?.phone_number || '';
+    return contactName.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   const selectedChat = chats.find(c => c.id === selectedChatId);
+
+  const getTabCount = (status: ChatStatus) => {
+    return allChats.filter(c => c.current_status === status).length;
+  };
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
@@ -49,20 +45,6 @@ export default function Chats() {
         <Card className="p-4">
           <h3 className="font-semibold mb-3">Filters</h3>
           <div className="space-y-3">
-            <div>
-              <label className="text-sm text-muted-foreground mb-1.5 block">Channel</label>
-              <Select value={channelFilter} onValueChange={(v) => setChannelFilter(v as Channel | 'all')}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Channels</SelectItem>
-                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                  <SelectItem value="web">Website</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
             <div>
               <label className="text-sm text-muted-foreground mb-1.5 block">Search</label>
               <div className="relative">
@@ -82,20 +64,16 @@ export default function Chats() {
           <h3 className="font-semibold mb-2">Legend</h3>
           <div className="space-y-2 text-sm">
             <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-success" />
-              <span className="text-muted-foreground">WhatsApp</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-primary" />
-              <span className="text-muted-foreground">Website</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Bot className="w-4 h-4 text-muted-foreground" />
+              <Bot className="w-4 h-4 text-primary" />
               <span className="text-muted-foreground">AI Mode</span>
             </div>
             <div className="flex items-center gap-2">
               <User className="w-4 h-4 text-accent" />
-              <span className="text-muted-foreground">Admin Mode</span>
+              <span className="text-muted-foreground">Human Mode</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-destructive" />
+              <span className="text-muted-foreground">Needs Action</span>
             </div>
           </div>
         </Card>
@@ -104,18 +82,35 @@ export default function Chats() {
       {/* Middle Column: Chat List */}
       <div className="w-96 flex flex-col bg-card rounded-lg border">
         <div className="p-4 border-b">
-          <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as any)}>
-            <TabsList className="w-full">
-              <TabsTrigger value="all" className="flex-1">All Chats</TabsTrigger>
-              <TabsTrigger value="needs-action" className="flex-1">
-                Needs Action
-                {chats.filter(c => c.status === 'needs_action').length > 0 && (
-                  <Badge variant="secondary" className="ml-1.5 h-5 px-1.5">
-                    {chats.filter(c => c.status === 'needs_action').length}
+          <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as TabValue)}>
+            <TabsList className="w-full grid grid-cols-4">
+              <TabsTrigger value="ai" className="text-xs px-2">
+                AI
+                {getTabCount('ai') > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-4 px-1 text-xs">
+                    {getTabCount('ai')}
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="resolved" className="flex-1">Resolved</TabsTrigger>
+              <TabsTrigger value="needs_action" className="text-xs px-2">
+                Needs Action
+                {getTabCount('needs_action') > 0 && (
+                  <Badge variant="destructive" className="ml-1 h-4 px-1 text-xs">
+                    {getTabCount('needs_action')}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="human" className="text-xs px-2">
+                Human
+                {getTabCount('human') > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-4 px-1 text-xs">
+                    {getTabCount('human')}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="resolved" className="text-xs px-2">
+                Resolved
+              </TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -130,8 +125,8 @@ export default function Chats() {
             <div className="divide-y">
               {filteredChats.map((chat) => {
                 const isSelected = chat.id === selectedChatId;
-                const ChannelIcon = chat.channel === 'whatsapp' ? MessageSquare : Globe;
-                const ModeIcon = chat.mode === 'ai' ? Bot : User;
+                const contactName = chat.contact?.display_name || chat.contact?.phone_number || 'Unknown';
+                const StatusIcon = chat.current_status === 'ai' || chat.current_status === 'resolved' ? Bot : User;
                 
                 return (
                   <button
@@ -145,40 +140,32 @@ export default function Chats() {
                     <div className="flex items-start gap-3">
                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                         <span className="text-sm font-medium text-primary">
-                          {chat.customerName.charAt(0)}
+                          {contactName.charAt(0)}
                         </span>
                       </div>
                       
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium truncate">{chat.customerName}</span>
+                          <span className="font-medium truncate">{contactName}</span>
                           <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
-                            {new Date(chat.lastMessageTime).toLocaleTimeString('en-US', { 
+                            {chat.last_message_at && new Date(chat.last_message_at).toLocaleTimeString('en-US', { 
                               hour: '2-digit', 
                               minute: '2-digit' 
                             })}
                           </span>
                         </div>
                         
-                        <p className="text-sm text-muted-foreground truncate mb-2">
-                          {chat.lastMessage}
-                        </p>
-                        
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <ChannelIcon className={cn(
+                          <StatusIcon className={cn(
                             'w-3.5 h-3.5',
-                            chat.channel === 'whatsapp' ? 'text-success' : 'text-primary'
+                            chat.current_status === 'ai' || chat.current_status === 'resolved' ? 'text-primary' : 'text-accent'
                           )} />
-                          <ModeIcon className={cn(
-                            'w-3.5 h-3.5',
-                            chat.mode === 'ai' ? 'text-muted-foreground' : 'text-accent'
-                          )} />
-                          {chat.escalated && (
-                            <AlertCircle className="w-3.5 h-3.5 text-accent" />
+                          {chat.current_status === 'needs_action' && (
+                            <AlertCircle className="w-3.5 h-3.5 text-destructive" />
                           )}
-                          {chat.unreadCount > 0 && (
+                          {(chat.unread_count_for_human || 0) > 0 && (
                             <Badge variant="default" className="h-5 min-w-5 px-1.5 text-xs">
-                              {chat.unreadCount}
+                              {chat.unread_count_for_human}
                             </Badge>
                           )}
                         </div>

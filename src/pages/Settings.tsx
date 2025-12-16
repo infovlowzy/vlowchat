@@ -8,13 +8,24 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Globe, Copy, Check, Plus, Pencil, Trash2, ExternalLink } from 'lucide-react';
-import { mockBusiness, mockQuickReplies } from '@/lib/mockData';
+import { MessageSquare, Globe, Copy, Check, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function Settings() {
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
+  const { workspace, currentWorkspaceId, refetchWorkspace } = useWorkspace();
+  
+  const [formData, setFormData] = useState({
+    name: workspace?.name || '',
+    business_email: workspace?.business_email || '',
+    whatsapp_phone_number: workspace?.whatsapp_phone_number || '',
+    business_address: workspace?.business_address || '',
+    locale: workspace?.locale || 'en',
+    timezone: workspace?.timezone || 'Asia/Jakarta',
+  });
 
   const embedCode = `<script>
   (function(w,d,s,o,f,js,fjs){
@@ -22,7 +33,7 @@ export default function Settings() {
     js=d.createElement(s),fjs=d.getElementsByTagName(s)[0];
     js.id=o;js.src=f;js.async=1;fjs.parentNode.insertBefore(js,fjs);
   }(window,document,'script','vcw','https://cdn.vlowchat.ai/widget.js'));
-  vcw('init', { businessId: '${mockBusiness.id}' });
+  vcw('init', { workspaceId: '${currentWorkspaceId}' });
 </script>`;
 
   const handleCopyEmbed = () => {
@@ -35,25 +46,50 @@ export default function Settings() {
     });
   };
 
-  const handleSave = () => {
-    toast({
-      title: 'Settings saved',
-      description: 'Your changes have been saved successfully.'
-    });
+  const handleSave = async () => {
+    if (!currentWorkspaceId) return;
+
+    try {
+      const { error } = await supabase
+        .from('workspaces')
+        .update({
+          name: formData.name,
+          business_email: formData.business_email,
+          whatsapp_phone_number: formData.whatsapp_phone_number,
+          business_address: formData.business_address,
+          locale: formData.locale,
+          timezone: formData.timezone,
+        })
+        .eq('id', currentWorkspaceId);
+
+      if (error) throw error;
+
+      await refetchWorkspace();
+      
+      toast({
+        title: 'Settings saved',
+        description: 'Your changes have been saved successfully.'
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to save settings',
+        variant: 'destructive'
+      });
+    }
   };
 
   return (
     <div className="space-y-6 max-w-5xl">
       <PageHeader
         title="Settings"
-        description="Manage your business profile, integrations, and preferences"
+        description="Manage your workspace profile, integrations, and preferences"
       />
 
       <Tabs defaultValue="business">
         <TabsList>
           <TabsTrigger value="business">Business Profile</TabsTrigger>
           <TabsTrigger value="channels">Channels</TabsTrigger>
-          <TabsTrigger value="quick-replies">Quick Replies</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="preferences">Preferences</TabsTrigger>
         </TabsList>
@@ -71,17 +107,41 @@ export default function Settings() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="business-name">Business Name</Label>
-                  <Input id="business-name" defaultValue={mockBusiness.name} />
+                  <Input 
+                    id="business-name" 
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="business-email">Contact Email</Label>
-                  <Input id="business-email" type="email" defaultValue={mockBusiness.email} />
+                  <Input 
+                    id="business-email" 
+                    type="email" 
+                    value={formData.business_email}
+                    onChange={(e) => setFormData({ ...formData, business_email: e.target.value })}
+                  />
                 </div>
               </div>
               
-              <div className="space-y-2">
-                <Label htmlFor="business-phone">Contact Phone</Label>
-                <Input id="business-phone" defaultValue={mockBusiness.phone} />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="whatsapp-phone">WhatsApp Phone Number</Label>
+                  <Input 
+                    id="whatsapp-phone" 
+                    value={formData.whatsapp_phone_number}
+                    onChange={(e) => setFormData({ ...formData, whatsapp_phone_number: e.target.value })}
+                    placeholder="+62 812 3456 7890"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="business-address">Business Address</Label>
+                  <Input 
+                    id="business-address" 
+                    value={formData.business_address}
+                    onChange={(e) => setFormData({ ...formData, business_address: e.target.value })}
+                  />
+                </div>
               </div>
 
               <Button onClick={handleSave}>Save Changes</Button>
@@ -105,11 +165,19 @@ export default function Settings() {
               <div className="flex items-center justify-between p-4 rounded-lg border">
                 <div>
                   <p className="font-medium">Status</p>
-                  <p className="text-sm text-muted-foreground">Connected to +62 812-3456-7890</p>
+                  <p className="text-sm text-muted-foreground">
+                    {workspace?.whatsapp_phone_number 
+                      ? `Connected to ${workspace.whatsapp_phone_number}` 
+                      : 'Not connected'}
+                  </p>
                 </div>
-                <Badge className="bg-success text-success-foreground">
-                  <Check className="w-3 h-3 mr-1" />
-                  Connected
+                <Badge className={workspace?.whatsapp_phone_number ? "bg-success text-success-foreground" : "bg-muted"}>
+                  {workspace?.whatsapp_phone_number ? (
+                    <>
+                      <Check className="w-3 h-3 mr-1" />
+                      Connected
+                    </>
+                  ) : 'Not Connected'}
                 </Badge>
               </div>
               <Button variant="outline">Manage Connection</Button>
@@ -153,96 +221,6 @@ export default function Settings() {
               </Button>
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Coming Soon</CardTitle>
-              <CardDescription>
-                More channels will be available in future updates
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3">
-                <Button variant="outline" disabled>
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Telegram
-                </Button>
-                <Button variant="outline" disabled>
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Facebook Messenger
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Quick Replies */}
-        <TabsContent value="quick-replies" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Quick Reply Templates</CardTitle>
-                  <CardDescription>
-                    Create reusable message templates for faster responses
-                  </CardDescription>
-                </div>
-                <Button size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Template
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {mockQuickReplies.map((reply) => (
-                  <div
-                    key={reply.id}
-                    className="flex items-start justify-between p-4 rounded-lg border"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-medium">{reply.name}</span>
-                        {reply.channel && (
-                          <Badge variant="outline" className="text-xs capitalize">
-                            {reply.channel}
-                          </Badge>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground">{reply.content}</p>
-                    </div>
-                    <div className="flex items-center gap-1 ml-4">
-                      <Button size="icon" variant="ghost">
-                        <Pencil className="w-4 h-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost">
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>AI Playbooks</CardTitle>
-              <CardDescription>
-                Pre-configured AI conversation flows (Read-only in MVP)
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {['Payment Follow-up', 'Order Status Explanation', 'Shipping Inquiry'].map((playbook) => (
-                  <div key={playbook} className="flex items-center justify-between p-3 rounded-lg border">
-                    <span className="text-sm font-medium">{playbook}</span>
-                    <Badge variant="secondary">Active</Badge>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
         </TabsContent>
 
         {/* Notifications */}
@@ -257,7 +235,7 @@ export default function Settings() {
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium">New Chats</p>
+                  <p className="font-medium">Incoming Chats</p>
                   <p className="text-sm text-muted-foreground">Get notified when customers start new conversations</p>
                 </div>
                 <Switch defaultChecked />
@@ -265,8 +243,8 @@ export default function Settings() {
               
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="font-medium">Needs Action Chats</p>
-                  <p className="text-sm text-muted-foreground">Alert me when chats require admin attention</p>
+                  <p className="font-medium">Needs Action</p>
+                  <p className="text-sm text-muted-foreground">Alert me when chats require human attention</p>
                 </div>
                 <Switch defaultChecked />
               </div>
@@ -303,7 +281,10 @@ export default function Settings() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Language</Label>
-                  <Select defaultValue={mockBusiness.language}>
+                  <Select 
+                    value={formData.locale}
+                    onValueChange={(v) => setFormData({ ...formData, locale: v })}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -316,7 +297,10 @@ export default function Settings() {
                 
                 <div className="space-y-2">
                   <Label>Timezone</Label>
-                  <Select defaultValue={mockBusiness.timezone}>
+                  <Select 
+                    value={formData.timezone}
+                    onValueChange={(v) => setFormData({ ...formData, timezone: v })}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
