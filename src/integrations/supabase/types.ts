@@ -16,6 +16,54 @@ export type Database = {
     Tables: {
       chats: {
         Row: {
+          assigned_user_id: string | null
+          contact_id: string
+          created_at: string | null
+          current_status: Database["public"]["Enums"]["chat_status"]
+          id: string
+          last_message_at: string | null
+          unread_count_for_human: number | null
+          workspace_id: string
+        }
+        Insert: {
+          assigned_user_id?: string | null
+          contact_id: string
+          created_at?: string | null
+          current_status?: Database["public"]["Enums"]["chat_status"]
+          id?: string
+          last_message_at?: string | null
+          unread_count_for_human?: number | null
+          workspace_id: string
+        }
+        Update: {
+          assigned_user_id?: string | null
+          contact_id?: string
+          created_at?: string | null
+          current_status?: Database["public"]["Enums"]["chat_status"]
+          id?: string
+          last_message_at?: string | null
+          unread_count_for_human?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chats_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chats_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chats_old: {
+        Row: {
           channel: Database["public"]["Enums"]["channel"]
           created_at: string | null
           customer_avatar: string | null
@@ -28,7 +76,7 @@ export type Database = {
           mode: Database["public"]["Enums"]["chat_mode"] | null
           notes: string | null
           payment_related: boolean | null
-          status: Database["public"]["Enums"]["chat_status"] | null
+          status: Database["public"]["Enums"]["chat_status_old"] | null
           tags: string[] | null
           total_chats: number | null
           unread_count: number | null
@@ -48,7 +96,7 @@ export type Database = {
           mode?: Database["public"]["Enums"]["chat_mode"] | null
           notes?: string | null
           payment_related?: boolean | null
-          status?: Database["public"]["Enums"]["chat_status"] | null
+          status?: Database["public"]["Enums"]["chat_status_old"] | null
           tags?: string[] | null
           total_chats?: number | null
           unread_count?: number | null
@@ -68,7 +116,7 @@ export type Database = {
           mode?: Database["public"]["Enums"]["chat_mode"] | null
           notes?: string | null
           payment_related?: boolean | null
-          status?: Database["public"]["Enums"]["chat_status"] | null
+          status?: Database["public"]["Enums"]["chat_status_old"] | null
           tags?: string[] | null
           total_chats?: number | null
           unread_count?: number | null
@@ -77,7 +125,242 @@ export type Database = {
         }
         Relationships: []
       }
+      contacts: {
+        Row: {
+          created_at: string | null
+          display_name: string | null
+          id: string
+          last_seen_at: string | null
+          phone_number: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          last_seen_at?: string | null
+          phone_number: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          display_name?: string | null
+          id?: string
+          last_seen_at?: string | null
+          phone_number?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contacts_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_items: {
+        Row: {
+          description: string | null
+          discount_type: Database["public"]["Enums"]["discount_type"] | null
+          discount_value: number | null
+          id: string
+          invoice_id: string
+          line_total: number | null
+          name: string
+          product_id: string | null
+          quantity: number | null
+          unit_price: number | null
+        }
+        Insert: {
+          description?: string | null
+          discount_type?: Database["public"]["Enums"]["discount_type"] | null
+          discount_value?: number | null
+          id?: string
+          invoice_id: string
+          line_total?: number | null
+          name: string
+          product_id?: string | null
+          quantity?: number | null
+          unit_price?: number | null
+        }
+        Update: {
+          description?: string | null
+          discount_type?: Database["public"]["Enums"]["discount_type"] | null
+          discount_value?: number | null
+          id?: string
+          invoice_id?: string
+          line_total?: number | null
+          name?: string
+          product_id?: string | null
+          quantity?: number | null
+          unit_price?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_items_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          chat_id: string
+          contact_id: string
+          created_at: string | null
+          created_by_type: Database["public"]["Enums"]["message_sender_type"]
+          created_by_user_id: string | null
+          currency_code: string | null
+          discount_amount: number | null
+          id: string
+          invoice_number: string | null
+          status: Database["public"]["Enums"]["invoice_status"]
+          subtotal_amount: number | null
+          tax_amount: number | null
+          total_amount: number | null
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          chat_id: string
+          contact_id: string
+          created_at?: string | null
+          created_by_type?: Database["public"]["Enums"]["message_sender_type"]
+          created_by_user_id?: string | null
+          currency_code?: string | null
+          discount_amount?: number | null
+          id?: string
+          invoice_number?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"]
+          subtotal_amount?: number | null
+          tax_amount?: number | null
+          total_amount?: number | null
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          chat_id?: string
+          contact_id?: string
+          created_at?: string | null
+          created_by_type?: Database["public"]["Enums"]["message_sender_type"]
+          created_by_user_id?: string | null
+          currency_code?: string | null
+          discount_amount?: number | null
+          id?: string
+          invoice_number?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"]
+          subtotal_amount?: number | null
+          tax_amount?: number | null
+          total_amount?: number | null
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
+        Row: {
+          chat_id: string
+          contact_id: string
+          content_type: Database["public"]["Enums"]["message_content_type"]
+          created_at: string | null
+          direction: Database["public"]["Enums"]["message_direction"]
+          id: string
+          media_mime_type: string | null
+          media_url: string | null
+          sender_type: Database["public"]["Enums"]["message_sender_type"]
+          sender_user_id: string | null
+          text: string | null
+          wa_message_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          chat_id: string
+          contact_id: string
+          content_type?: Database["public"]["Enums"]["message_content_type"]
+          created_at?: string | null
+          direction: Database["public"]["Enums"]["message_direction"]
+          id?: string
+          media_mime_type?: string | null
+          media_url?: string | null
+          sender_type: Database["public"]["Enums"]["message_sender_type"]
+          sender_user_id?: string | null
+          text?: string | null
+          wa_message_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          chat_id?: string
+          contact_id?: string
+          content_type?: Database["public"]["Enums"]["message_content_type"]
+          created_at?: string | null
+          direction?: Database["public"]["Enums"]["message_direction"]
+          id?: string
+          media_mime_type?: string | null
+          media_url?: string | null
+          sender_type?: Database["public"]["Enums"]["message_sender_type"]
+          sender_user_id?: string | null
+          text?: string | null
+          wa_message_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_chat_id_fkey1"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chats"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages_old: {
         Row: {
           chat_id: string
           content: string
@@ -110,7 +393,63 @@ export type Database = {
             foreignKeyName: "messages_chat_id_fkey"
             columns: ["chat_id"]
             isOneToOne: false
-            referencedRelation: "chats"
+            referencedRelation: "chats_old"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      products: {
+        Row: {
+          ai_explanation: string | null
+          created_at: string | null
+          description: string | null
+          discount_type: Database["public"]["Enums"]["discount_type"] | null
+          discount_value: number | null
+          id: string
+          is_deleted: boolean | null
+          name: string
+          price: number
+          status: Database["public"]["Enums"]["product_status"] | null
+          stock: number | null
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          ai_explanation?: string | null
+          created_at?: string | null
+          description?: string | null
+          discount_type?: Database["public"]["Enums"]["discount_type"] | null
+          discount_value?: number | null
+          id?: string
+          is_deleted?: boolean | null
+          name: string
+          price?: number
+          status?: Database["public"]["Enums"]["product_status"] | null
+          stock?: number | null
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          ai_explanation?: string | null
+          created_at?: string | null
+          description?: string | null
+          discount_type?: Database["public"]["Enums"]["discount_type"] | null
+          discount_value?: number | null
+          id?: string
+          is_deleted?: boolean | null
+          name?: string
+          price?: number
+          status?: Database["public"]["Enums"]["product_status"] | null
+          stock?: number | null
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -229,7 +568,7 @@ export type Database = {
             foreignKeyName: "transactions_chat_id_fkey"
             columns: ["chat_id"]
             isOneToOne: false
-            referencedRelation: "chats"
+            referencedRelation: "chats_old"
             referencedColumns: ["id"]
           },
         ]
@@ -252,6 +591,77 @@ export type Database = {
         }
         Relationships: []
       }
+      workspace_users: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["workspace_user_role"]
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["workspace_user_role"]
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["workspace_user_role"]
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_users_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspaces: {
+        Row: {
+          business_address: string | null
+          business_email: string | null
+          business_logo_url: string | null
+          created_at: string | null
+          currency_code: string | null
+          id: string
+          locale: string | null
+          name: string
+          timezone: string | null
+          whatsapp_phone_number: string | null
+        }
+        Insert: {
+          business_address?: string | null
+          business_email?: string | null
+          business_logo_url?: string | null
+          created_at?: string | null
+          currency_code?: string | null
+          id?: string
+          locale?: string | null
+          name: string
+          timezone?: string | null
+          whatsapp_phone_number?: string | null
+        }
+        Update: {
+          business_address?: string | null
+          business_email?: string | null
+          business_logo_url?: string | null
+          created_at?: string | null
+          currency_code?: string | null
+          id?: string
+          locale?: string | null
+          name?: string
+          timezone?: string | null
+          whatsapp_phone_number?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -264,13 +674,36 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_workspace_member: {
+        Args: { _user_id: string; _workspace_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "agent"
       channel: "whatsapp" | "web"
       chat_mode: "ai" | "admin"
-      chat_status: "open" | "needs_action" | "resolved"
+      chat_status: "ai" | "needs_action" | "human" | "resolved"
+      chat_status_old: "open" | "needs_action" | "resolved"
+      discount_type: "none" | "percentage" | "fixed"
+      invoice_status: "waiting_for_payment" | "paid" | "approved"
+      message_content_type:
+        | "text"
+        | "image"
+        | "document"
+        | "audio"
+        | "video"
+        | "other"
+      message_direction: "inbound" | "outbound"
+      message_sender_type: "customer" | "ai" | "human"
+      notification_type:
+        | "incoming_chat"
+        | "payment_alert"
+        | "customer_paid"
+        | "needs_escalation"
+      product_status: "active" | "inactive"
       transaction_status: "awaiting_check" | "proof_received" | "handled"
+      workspace_user_role: "owner" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -401,8 +834,29 @@ export const Constants = {
       app_role: ["admin", "agent"],
       channel: ["whatsapp", "web"],
       chat_mode: ["ai", "admin"],
-      chat_status: ["open", "needs_action", "resolved"],
+      chat_status: ["ai", "needs_action", "human", "resolved"],
+      chat_status_old: ["open", "needs_action", "resolved"],
+      discount_type: ["none", "percentage", "fixed"],
+      invoice_status: ["waiting_for_payment", "paid", "approved"],
+      message_content_type: [
+        "text",
+        "image",
+        "document",
+        "audio",
+        "video",
+        "other",
+      ],
+      message_direction: ["inbound", "outbound"],
+      message_sender_type: ["customer", "ai", "human"],
+      notification_type: [
+        "incoming_chat",
+        "payment_alert",
+        "customer_paid",
+        "needs_escalation",
+      ],
+      product_status: ["active", "inactive"],
       transaction_status: ["awaiting_check", "proof_received", "handled"],
+      workspace_user_role: ["owner", "admin"],
     },
   },
 } as const
