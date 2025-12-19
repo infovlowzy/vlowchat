@@ -83,33 +83,33 @@ export default function Chats() {
       <div className="w-96 flex flex-col bg-card rounded-lg border">
         <div className="p-4 border-b">
           <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as TabValue)}>
-            <TabsList className="w-full grid grid-cols-4">
-              <TabsTrigger value="ai" className="text-xs px-2">
-                AI
+            <TabsList className="w-full h-auto p-1 gap-1">
+              <TabsTrigger value="ai" className="flex-1 text-xs py-2 px-3 min-w-0">
+                <span className="truncate">AI</span>
                 {getTabCount('ai') > 0 && (
-                  <Badge variant="secondary" className="ml-1 h-4 px-1 text-xs">
+                  <Badge variant="secondary" className="ml-1.5 h-5 min-w-5 px-1.5 text-xs flex-shrink-0">
                     {getTabCount('ai')}
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="needs_action" className="text-xs px-2">
-                Needs Action
+              <TabsTrigger value="needs_action" className="flex-1 text-xs py-2 px-3 min-w-0">
+                <span className="truncate">Action</span>
                 {getTabCount('needs_action') > 0 && (
-                  <Badge variant="destructive" className="ml-1 h-4 px-1 text-xs">
+                  <Badge variant="destructive" className="ml-1.5 h-5 min-w-5 px-1.5 text-xs flex-shrink-0">
                     {getTabCount('needs_action')}
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="human" className="text-xs px-2">
-                Human
+              <TabsTrigger value="human" className="flex-1 text-xs py-2 px-3 min-w-0">
+                <span className="truncate">Human</span>
                 {getTabCount('human') > 0 && (
-                  <Badge variant="secondary" className="ml-1 h-4 px-1 text-xs">
+                  <Badge variant="secondary" className="ml-1.5 h-5 min-w-5 px-1.5 text-xs flex-shrink-0">
                     {getTabCount('human')}
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="resolved" className="text-xs px-2">
-                Resolved
+              <TabsTrigger value="resolved" className="flex-1 text-xs py-2 px-3 min-w-0">
+                <span className="truncate">Resolved</span>
               </TabsTrigger>
             </TabsList>
           </Tabs>
