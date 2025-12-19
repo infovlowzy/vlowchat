@@ -1,6 +1,9 @@
 // Chat status enum matching database
 export type ChatStatus = 'ai' | 'needs_action' | 'human' | 'resolved';
 
+// Channel enum matching database
+export type Channel = 'whatsapp' | 'web';
+
 // Message enums matching database
 export type MessageDirection = 'inbound' | 'outbound';
 export type MessageSenderType = 'customer' | 'ai' | 'human';
