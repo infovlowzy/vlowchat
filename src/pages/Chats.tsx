@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -37,13 +37,6 @@ export default function Chats() {
   });
 
   const selectedChat = chats.find(c => c.id === selectedChatId);
-
-  // Auto-select the most recent chat to mirror WhatsApp's default behavior.
-  useEffect(() => {
-    if (!selectedChatId && filteredChats.length > 0) {
-      setSelectedChatId(filteredChats[0].id);
-    }
-  }, [filteredChats, selectedChatId]);
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;

@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,7 +10,6 @@ import { Chat, Message } from '@/types';
 import { cn } from '@/lib/utils';
 import { mockQuickReplies } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 
 interface ChatDetailProps {
   chat: Chat;
@@ -21,16 +19,9 @@ interface ChatDetailProps {
 export function ChatDetail({ chat, messages }: ChatDetailProps) {
   const [messageText, setMessageText] = useState('');
   const [isAdminMode, setIsAdminMode] = useState(chat.mode === 'admin');
-  const [isSending, setIsSending] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   
   const ChannelIcon = chat.channel === 'whatsapp' ? MessageSquare : Globe;
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
 
   const handleTakeOver = () => {
     setIsAdminMode(true);
@@ -48,55 +39,14 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
     });
   };
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!messageText.trim()) return;
-    if (isSending) return;
-
-    const content = messageText.trim();
-    const timestamp = new Date().toISOString();
-
-    setIsSending(true);
-    setMessageText('');
-
-    const { error } = await supabase.from('messages').insert({
-      chat_id: chat.id,
-      sender: 'admin',
-      content,
-      timestamp,
-      read: true,
-    });
-
-    if (error) {
-      setMessageText(content);
-      toast({
-        title: 'Unable to send',
-        description: 'Please try again.',
-        variant: 'destructive',
-      });
-      setIsSending(false);
-      return;
-    }
-
-    // Keep chat list in sync so last message preview updates immediately.
-    await supabase
-      .from('chats')
-      .update({
-        last_message: content,
-        last_message_time: timestamp,
-        unread_count: 0,
-      })
-      .eq('id', chat.id);
-
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['messages', chat.id] }),
-      queryClient.invalidateQueries({ queryKey: ['chats'] }),
-    ]);
-
+    
     toast({
       title: 'Message sent',
       description: 'Your message has been delivered.'
     });
-    setIsSending(false);
+    setMessageText('');
   };
 
   return (
@@ -236,7 +186,6 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
             </div>
           );
         })}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Meta Info */}
@@ -288,18 +237,17 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
                   handleSend();
                 }
               }}
-              disabled={isSending}
             />
           </div>
           
           <div className="flex flex-col gap-2">
-            <Button size="icon" variant="outline" disabled={isSending}>
+            <Button size="icon" variant="outline">
               <Smile className="w-4 h-4" />
             </Button>
-            <Button size="icon" variant="outline" disabled={isSending}>
+            <Button size="icon" variant="outline">
               <Paperclip className="w-4 h-4" />
             </Button>
-            <Button size="icon" onClick={handleSend} disabled={isSending || !messageText.trim()}>
+            <Button size="icon" onClick={handleSend}>
               <Send className="w-4 h-4" />
             </Button>
           </div>

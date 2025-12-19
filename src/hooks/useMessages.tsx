@@ -23,7 +23,5 @@ export function useMessages(chatId: string | null) {
       })) as Message[];
     },
     enabled: !!chatId,
-    // Keep the conversation view feeling live, similar to WhatsApp.
-    refetchInterval: chatId ? 3000 : false,
   });
 }
