@@ -1,76 +1,212 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MessageSquare, Globe, ExternalLink, Check, TrendingUp } from 'lucide-react';
-import { Channel } from '@/types';
+import { 
+  ExternalLink, 
+  Check, 
+  TrendingUp, 
+  MessageSquare, 
+  FileText, 
+  Search,
+  RotateCcw,
+  Clock,
+  CheckCircle2,
+  Receipt
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { useTransactions } from '@/hooks/useTransactions';
+import { useInvoices, useUpdateInvoiceStatus, useTodayPaidCount } from '@/hooks/useInvoices';
 import { useAuth } from '@/hooks/useAuth';
+import type { Invoice } from '@/types';
+
+type ChannelFilter = 'all' | 'whatsapp' | 'web';
 
 export default function Transactions() {
   useAuth();
-  const { data: transactions = [], isLoading } = useTransactions();
-  const [channelFilter, setChannelFilter] = useState<Channel | 'all'>('all');
+  const navigate = useNavigate();
   const { toast } = useToast();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [channelFilter, setChannelFilter] = useState<ChannelFilter>('all');
+  
+  // Fetch invoices by status
+  const { data: triggeredInvoices = [], isLoading: loadingTriggered } = useInvoices('waiting_for_payment');
+  const { data: paidInvoices = [], isLoading: loadingPaid } = useInvoices('paid');
+  const { data: approvedInvoices = [], isLoading: loadingApproved } = useInvoices('approved');
+  
+  // Get today's paid count
+  const { data: todayPaidCount = 0 } = useTodayPaidCount();
+  
+  const updateInvoiceStatus = useUpdateInvoiceStatus();
 
-  const incomingTransactions = transactions.filter(t => t.status !== 'handled');
-  const handledTransactions = transactions.filter(t => t.status === 'handled');
-
-  const filteredIncoming = channelFilter === 'all' 
-    ? incomingTransactions 
-    : incomingTransactions.filter(t => t.channel === channelFilter);
-    
-  const filteredHandled = channelFilter === 'all'
-    ? handledTransactions
-    : handledTransactions.filter(t => t.channel === channelFilter);
-
-  const handleMarkAsHandled = (id: string) => {
-    toast({
-      title: 'Transaction marked as handled',
-      description: 'The payment alert has been processed.'
+  // Filter invoices based on search and channel
+  const filterInvoices = (invoices: Invoice[]) => {
+    return invoices.filter(invoice => {
+      const contactName = invoice.contact?.display_name || invoice.contact?.phone_number || '';
+      const matchesSearch = !searchQuery || 
+        contactName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (invoice.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const phoneNumber = invoice.contact?.phone_number || '';
+      const isWebChat = phoneNumber.startsWith('web-');
+      const matchesChannel = channelFilter === 'all' || 
+        (channelFilter === 'web' && isWebChat) ||
+        (channelFilter === 'whatsapp' && !isWebChat);
+      
+      return matchesSearch && matchesChannel;
     });
   };
 
-  const handleOpenChat = () => {
-    toast({
-      title: 'Opening chat',
-      description: 'Navigating to conversation...'
-    });
-  };
+  const filteredTriggered = filterInvoices(triggeredInvoices);
+  const filteredPaid = filterInvoices(paidInvoices);
+  const filteredApproved = filterInvoices(approvedInvoices);
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'awaiting_check':
-        return <Badge variant="secondary">Awaiting Check</Badge>;
-      case 'proof_received':
-        return <Badge className="bg-warning text-warning-foreground">Proof Received</Badge>;
-      case 'handled':
-        return <Badge className="bg-success text-success-foreground">Handled</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
+  const handleMarkAsPaid = async (invoiceId: string) => {
+    try {
+      await updateInvoiceStatus.mutateAsync({
+        invoiceId,
+        status: 'paid',
+      });
+      toast({
+        title: 'Invoice marked as paid',
+        description: 'The invoice has been moved to the Paid tab.'
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update invoice status',
+        variant: 'destructive'
+      });
     }
   };
 
-  const todayHandled = handledTransactions.filter(t => {
-    if (!t.handledAt) return false;
-    const today = new Date();
-    return t.handledAt.toDateString() === today.toDateString();
-  }).length;
+  const handleMarkAsApproved = async (invoiceId: string) => {
+    try {
+      await updateInvoiceStatus.mutateAsync({
+        invoiceId,
+        status: 'approved',
+      });
+      toast({
+        title: 'Invoice approved',
+        description: 'The invoice has been moved to the Approved tab.'
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update invoice status',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleReturnToPaid = async (invoiceId: string) => {
+    try {
+      await updateInvoiceStatus.mutateAsync({
+        invoiceId,
+        status: 'paid',
+      });
+      toast({
+        title: 'Invoice returned',
+        description: 'The invoice has been moved back to the Paid tab.'
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to update invoice status',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleOpenChat = (chatId: string) => {
+    navigate(`/chats?chatId=${chatId}`);
+  };
+
+  const handleOpenInvoice = (invoiceId: string) => {
+    // TODO: Navigate to invoice detail page
+    toast({
+      title: 'Open Invoice',
+      description: `Invoice detail page coming soon. ID: ${invoiceId.slice(0, 8)}...`
+    });
+  };
+
+  const getChannelBadge = (phoneNumber: string) => {
+    if (phoneNumber.startsWith('web-')) {
+      return <Badge variant="outline" className="text-xs">Web</Badge>;
+    }
+    return <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-500/20">WA</Badge>;
+  };
+
+  const isLoading = loadingTriggered || loadingPaid || loadingApproved;
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
   }
 
+  const renderInvoiceCard = (
+    invoice: Invoice, 
+    actions: React.ReactNode
+  ) => {
+    const contactName = invoice.contact?.display_name || invoice.contact?.phone_number || 'Unknown';
+    const phoneNumber = invoice.contact?.phone_number || '';
+    
+    return (
+      <div
+        key={invoice.id}
+        className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
+      >
+        <div className="flex items-start gap-4 flex-1">
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <span className="text-sm font-medium text-primary">
+              {contactName.charAt(0).toUpperCase()}
+            </span>
+          </div>
+          
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <span className="font-medium">{contactName}</span>
+              {getChannelBadge(phoneNumber)}
+              {invoice.invoice_number && (
+                <Badge variant="secondary" className="text-xs">
+                  {invoice.invoice_number}
+                </Badge>
+              )}
+            </div>
+            
+            <p className="text-sm text-muted-foreground mb-2">
+              {invoice.currency_code || 'IDR'} {Number(invoice.total_amount).toLocaleString()}
+            </p>
+            
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              <span>
+                {invoice.created_at && new Date(invoice.created_at).toLocaleString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2 ml-4 flex-wrap justify-end">
+          {actions}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Transactions"
-        description="Monitor payment-related conversations and alerts detected by AI"
+        description="Monitor payment-related conversations and invoices detected by AI"
       />
 
       {/* Stats Card */}
@@ -82,19 +218,28 @@ export default function Transactions() {
                 <TrendingUp className="w-5 h-5" />
                 Payment Activity
               </CardTitle>
-              <CardDescription>Payments handled today</CardDescription>
+              <CardDescription>Payments processed today</CardDescription>
             </div>
-            <div className="text-3xl font-bold">{todayHandled}</div>
+            <div className="text-3xl font-bold">{todayPaidCount}</div>
           </div>
         </CardHeader>
       </Card>
 
       {/* Filters */}
-      <div className="flex items-center gap-3">
-        <div className="w-48">
-          <Select value={channelFilter} onValueChange={(v) => setChannelFilter(v as Channel | 'all')}>
-            <SelectTrigger>
-              <SelectValue />
+      <Card className="p-4">
+        <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name or invoice number..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+          <Select value={channelFilter} onValueChange={(v) => setChannelFilter(v as ChannelFilter)}>
+            <SelectTrigger className="w-full sm:w-40">
+              <SelectValue placeholder="Channel" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Channels</SelectItem>
@@ -103,182 +248,195 @@ export default function Transactions() {
             </SelectContent>
           </Select>
         </div>
-      </div>
+      </Card>
 
       {/* Tabs */}
-      <Tabs defaultValue="incoming">
-        <TabsList>
-          <TabsTrigger value="incoming">
-            Incoming
-            {filteredIncoming.length > 0 && (
-              <Badge variant="secondary" className="ml-2 h-5 px-1.5">
-                {filteredIncoming.length}
+      <Tabs defaultValue="triggered">
+        <TabsList className="h-auto p-1 gap-1">
+          <TabsTrigger value="triggered" className="flex items-center gap-2 py-2 px-4">
+            <Clock className="w-4 h-4" />
+            <span>Invoice Triggered</span>
+            {triggeredInvoices.length > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 min-w-5 px-1.5">
+                {triggeredInvoices.length}
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="handled">Handled</TabsTrigger>
+          <TabsTrigger value="paid" className="flex items-center gap-2 py-2 px-4">
+            <Receipt className="w-4 h-4" />
+            <span>Paid</span>
+            {paidInvoices.length > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 min-w-5 px-1.5">
+                {paidInvoices.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="approved" className="flex items-center gap-2 py-2 px-4">
+            <CheckCircle2 className="w-4 h-4" />
+            <span>Approved</span>
+            {approvedInvoices.length > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 min-w-5 px-1.5">
+                {approvedInvoices.length}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="incoming" className="mt-6">
+        {/* Invoice Triggered Tab */}
+        <TabsContent value="triggered" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>Incoming Payment Alerts</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                Invoice Triggered
+              </CardTitle>
               <CardDescription>
-                Auto-detected payment conversations requiring attention
+                Invoices waiting for customer payment. Auto-moves to Paid when customer completes transaction.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {filteredIncoming.length === 0 ? (
+              {filteredTriggered.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
-                  <Check className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>No pending payment alerts</p>
+                  <Clock className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No pending invoices</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {filteredIncoming.map((transaction) => {
-                    const ChannelIcon = transaction.channel === 'whatsapp' ? MessageSquare : Globe;
-                    
-                    return (
-                      <div
-                        key={transaction.id}
-                        className="flex items-center justify-between p-4 rounded-lg border hover:bg-muted/50 transition-colors"
-                      >
-                        <div className="flex items-start gap-4 flex-1">
-                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <span className="text-sm font-medium text-primary">
-                              {transaction.customerName.charAt(0)}
-                            </span>
-                          </div>
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-medium">{transaction.customerName}</span>
-                              <ChannelIcon className={cn(
-                                'w-4 h-4',
-                                transaction.channel === 'whatsapp' ? 'text-success' : 'text-primary'
-                              )} />
-                              <Badge variant="outline" className="text-xs">
-                                {transaction.keyword}
-                              </Badge>
-                            </div>
-                            
-                            <p className="text-sm text-muted-foreground mb-2">
-                              "{transaction.snippet}"
-                            </p>
-                            
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                              <span>
-                                {new Date(transaction.timestamp).toLocaleString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </span>
-                              {getStatusBadge(transaction.status)}
-                            </div>
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-2 ml-4">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={handleOpenChat}
-                          >
-                            <ExternalLink className="w-4 h-4 mr-2" />
-                            Open Chat
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => handleMarkAsHandled(transaction.id)}
-                          >
-                            <Check className="w-4 h-4 mr-2" />
-                            Mark as Handled
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {filteredTriggered.map((invoice) => 
+                    renderInvoiceCard(invoice, (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenInvoice(invoice.id)}
+                        >
+                          <FileText className="w-4 h-4 mr-2" />
+                          Invoice
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenChat(invoice.chat_id)}
+                        >
+                          <MessageSquare className="w-4 h-4 mr-2" />
+                          Chat
+                        </Button>
+                      </>
+                    ))
+                  )}
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="handled" className="mt-6">
+        {/* Paid Tab */}
+        <TabsContent value="paid" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle>Handled Transactions</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Receipt className="w-5 h-5" />
+                Paid Invoices
+              </CardTitle>
               <CardDescription>
-                Resolved payment alerts and their outcomes
+                Invoices where payment has been received. Review and approve to complete.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {filteredHandled.length === 0 ? (
+              {filteredPaid.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
-                  <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>No handled transactions yet</p>
+                  <Receipt className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No paid invoices pending approval</p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {filteredHandled.map((transaction) => {
-                    const ChannelIcon = transaction.channel === 'whatsapp' ? MessageSquare : Globe;
-                    
-                    return (
-                      <div
-                        key={transaction.id}
-                        className="flex items-center justify-between p-4 rounded-lg border"
-                      >
-                        <div className="flex items-start gap-4 flex-1">
-                          <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                            <span className="text-sm font-medium">
-                              {transaction.customerName.charAt(0)}
-                            </span>
-                          </div>
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="font-medium">{transaction.customerName}</span>
-                              <ChannelIcon className={cn(
-                                'w-4 h-4',
-                                transaction.channel === 'whatsapp' ? 'text-success' : 'text-primary'
-                              )} />
-                              <Badge variant="outline" className="text-xs">
-                                {transaction.keyword}
-                              </Badge>
-                            </div>
-                            
-                            <p className="text-sm text-muted-foreground mb-2">
-                              "{transaction.snippet}"
-                            </p>
-                            
-                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                              <span>
-                                Handled by {transaction.handledBy} • {' '}
-                                {transaction.handledAt && new Date(transaction.handledAt).toLocaleString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </span>
-                              {getStatusBadge(transaction.status)}
-                            </div>
-                          </div>
-                        </div>
-                        
+                  {filteredPaid.map((invoice) => 
+                    renderInvoiceCard(invoice, (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => handleMarkAsApproved(invoice.id)}
+                          disabled={updateInvoiceStatus.isPending}
+                        >
+                          <Check className="w-4 h-4 mr-2" />
+                          Approve
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={handleOpenChat}
+                          onClick={() => handleOpenInvoice(invoice.id)}
                         >
-                          <ExternalLink className="w-4 h-4 mr-2" />
-                          View Chat
+                          <FileText className="w-4 h-4 mr-2" />
+                          Invoice
                         </Button>
-                      </div>
-                    );
-                  })}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenChat(invoice.chat_id)}
+                        >
+                          <MessageSquare className="w-4 h-4 mr-2" />
+                          Chat
+                        </Button>
+                      </>
+                    ))
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Approved Tab */}
+        <TabsContent value="approved" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5" />
+                Approved Invoices
+              </CardTitle>
+              <CardDescription>
+                Completed transactions that have been verified and approved.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {filteredApproved.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <CheckCircle2 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>No approved invoices yet</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filteredApproved.map((invoice) => 
+                    renderInvoiceCard(invoice, (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleReturnToPaid(invoice.id)}
+                          disabled={updateInvoiceStatus.isPending}
+                        >
+                          <RotateCcw className="w-4 h-4 mr-2" />
+                          Return
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenInvoice(invoice.id)}
+                        >
+                          <FileText className="w-4 h-4 mr-2" />
+                          Invoice
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenChat(invoice.chat_id)}
+                        >
+                          <MessageSquare className="w-4 h-4 mr-2" />
+                          Chat
+                        </Button>
+                      </>
+                    ))
+                  )}
                 </div>
               )}
             </CardContent>

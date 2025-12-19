@@ -5,6 +5,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Sidebar } from '@/components/layout/Sidebar';
+import { WorkspaceProvider } from '@/contexts/WorkspaceContext';
 import Home from './pages/Home';
 import Chats from './pages/Chats';
 import Transactions from './pages/Transactions';
@@ -13,7 +14,7 @@ import Auth from './pages/Auth';
 import NotFound from './pages/NotFound';
 import { cn } from './lib/utils';
 import { useChats } from './hooks/useChats';
-import { useTransactions } from './hooks/useTransactions';
+import { useInvoices } from './hooks/useInvoices';
 import { supabase } from './integrations/supabase/client';
 import type { User } from '@supabase/supabase-js';
 
@@ -53,10 +54,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function AppContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { data: chats = [] } = useChats();
-  const { data: transactions = [] } = useTransactions();
+  const { data: invoices = [] } = useInvoices('waiting_for_payment');
   
-  const unreadChats = chats.filter(c => c.status === 'needs_action').length;
-  const pendingTransactions = transactions.filter(t => t.status !== 'handled').length;
+  const unreadChats = chats.filter(c => c.current_status === 'needs_action').length;
+  const pendingTransactions = invoices.length;
 
   return (
     <TooltipProvider>
@@ -103,7 +104,9 @@ function AppContent() {
 const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppContent />
+      <WorkspaceProvider>
+        <AppContent />
+      </WorkspaceProvider>
     </QueryClientProvider>
   );
 };

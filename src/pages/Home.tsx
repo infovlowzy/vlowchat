@@ -7,44 +7,37 @@ import { MessageSquare, AlertCircle, Receipt, TrendingUp, Activity, CheckCircle2
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
+import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 type ViewType = 'daily' | 'weekly' | 'monthly';
 
 export default function Home() {
   const navigate = useNavigate();
+  const { currentWorkspaceId, workspace } = useWorkspace();
   const [chartType, setChartType] = useState<'line' | 'bar'>('line');
   const [viewType, setViewType] = useState<ViewType>('weekly');
-  const [selectedPeriod, setSelectedPeriod] = useState(0); // 0 = current period, -1 = last period, etc.
+  const [selectedPeriod, setSelectedPeriod] = useState(0);
 
-  const { data: profile } = useQuery({
-    queryKey: ["profile"],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) return null;
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .maybeSingle();
-      return data;
-    },
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-US', { 
+    weekday: 'long', 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric',
+    timeZone: workspace?.timezone || 'Asia/Jakarta'
   });
 
-  // Fetch real chat data based on view type and period
-  const { data: chatData } = useQuery({
-    queryKey: ["analytics", viewType, selectedPeriod],
+  // Fetch analytics data based on inbound messages
+  const { data: messageData } = useQuery({
+    queryKey: ["analytics-messages", currentWorkspaceId, viewType, selectedPeriod],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) return [];
+      if (!currentWorkspaceId) return [];
 
       let startDate: Date;
       let endDate: Date;
-      const now = new Date();
 
-      // Calculate date range based on view type and selected period
       if (viewType === 'daily') {
-        // For daily view, show last 24 hours in 4-hour chunks
         const daysOffset = Math.abs(selectedPeriod);
         startDate = new Date(now);
         startDate.setDate(startDate.getDate() - daysOffset);
@@ -52,7 +45,6 @@ export default function Home() {
         endDate = new Date(startDate);
         endDate.setDate(endDate.getDate() + 1);
       } else if (viewType === 'weekly') {
-        // For weekly view, show 7 days
         const weeksOffset = Math.abs(selectedPeriod);
         startDate = new Date(now);
         startDate.setDate(startDate.getDate() - (weeksOffset * 7) - 6);
@@ -61,85 +53,77 @@ export default function Home() {
         endDate.setDate(endDate.getDate() - (weeksOffset * 7) + 1);
         endDate.setHours(0, 0, 0, 0);
       } else {
-        // For monthly view, show 12 months
         const yearsOffset = Math.abs(selectedPeriod);
         startDate = new Date(now.getFullYear() - yearsOffset, 0, 1);
         endDate = new Date(now.getFullYear() - yearsOffset + 1, 0, 1);
       }
 
       const { data } = await supabase
-        .from("chats")
+        .from("messages")
         .select("created_at")
-        .eq("user_id", user.id)
+        .eq("workspace_id", currentWorkspaceId)
+        .eq("direction", "inbound")
         .gte("created_at", startDate.toISOString())
         .lt("created_at", endDate.toISOString())
         .order("created_at", { ascending: true });
 
       return data || [];
     },
-  });
-
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-US', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric',
-    timeZone: 'Asia/Jakarta'
+    enabled: !!currentWorkspaceId,
   });
 
   // Fetch real-time stats
   const { data: stats } = useQuery({
-    queryKey: ["dashboard-stats"],
+    queryKey: ["dashboard-stats", currentWorkspaceId],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) return null;
+      if (!currentWorkspaceId) return null;
 
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      // Get today's chats
-      const { count: todayCount } = await supabase
-        .from("chats")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id)
+      // Get today's chats (chats with messages today)
+      const { data: todayMessages } = await supabase
+        .from("messages")
+        .select("chat_id")
+        .eq("workspace_id", currentWorkspaceId)
         .gte("created_at", todayStart.toISOString());
+
+      const uniqueChatsToday = new Set(todayMessages?.map(m => m.chat_id) || []);
 
       // Get chats needing action
       const { count: needsActionCount } = await supabase
         .from("chats")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .eq("status", "needs_action");
+        .eq("workspace_id", currentWorkspaceId)
+        .eq("current_status", "needs_action");
 
-      // Get payment alerts
+      // Get payment alerts (invoices waiting for payment)
       const { count: paymentCount } = await supabase
-        .from("chats")
+        .from("invoices")
         .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .eq("payment_related", true)
-        .eq("status", "needs_action");
+        .eq("workspace_id", currentWorkspaceId)
+        .eq("status", "waiting_for_payment");
 
       return {
-        todayChats: todayCount || 0,
+        todayChats: uniqueChatsToday.size,
         needsActionChats: needsActionCount || 0,
         paymentAlerts: paymentCount || 0,
       };
     },
+    enabled: !!currentWorkspaceId,
   });
 
-  // Process real data into chart format
+  // Process data into chart format
   const processChartData = () => {
-    if (!chatData) return [];
+    if (!messageData) return [];
 
     const aggregated: { [key: string]: number } = {};
 
     if (viewType === 'daily') {
-      // Group by 4-hour intervals
       const intervals = ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00'];
       intervals.forEach(interval => aggregated[interval] = 0);
 
-      chatData.forEach(chat => {
-        const date = new Date(chat.created_at);
+      messageData.forEach((msg: { created_at: string }) => {
+        const date = new Date(msg.created_at);
         const hour = date.getHours();
         const intervalKey = intervals[Math.floor(hour / 4)];
         aggregated[intervalKey]++;
@@ -147,28 +131,25 @@ export default function Home() {
 
       return intervals.map(label => ({ label, count: aggregated[label] }));
     } else if (viewType === 'weekly') {
-      // Group by day of week
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       days.forEach(day => aggregated[day] = 0);
 
-      chatData.forEach(chat => {
-        const date = new Date(chat.created_at);
+      messageData.forEach((msg: { created_at: string }) => {
+        const date = new Date(msg.created_at);
         const dayName = days[date.getDay()];
         aggregated[dayName]++;
       });
 
-      // Reorder to start from Monday
       return ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(label => ({
         label,
         count: aggregated[label]
       }));
     } else {
-      // Group by month
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       months.forEach(month => aggregated[month] = 0);
 
-      chatData.forEach(chat => {
-        const date = new Date(chat.created_at);
+      messageData.forEach((msg: { created_at: string }) => {
+        const date = new Date(msg.created_at);
         const monthName = months[date.getMonth()];
         aggregated[monthName]++;
       });
@@ -194,7 +175,7 @@ export default function Home() {
       icon: AlertCircle,
       color: 'text-accent',
       bgColor: 'bg-accent/10',
-      onClick: () => navigate('/chats?tab=needs-action')
+      onClick: () => navigate('/chats')
     },
     {
       title: 'Payment Alerts',
@@ -206,16 +187,14 @@ export default function Home() {
     }
   ];
 
-  // Fetch previous period data for comparison
-  const { data: previousPeriodData } = useQuery({
-    queryKey: ["analytics-previous", viewType, selectedPeriod],
+  // Fetch previous period for comparison
+  const { data: previousMessageData } = useQuery({
+    queryKey: ["analytics-messages-previous", currentWorkspaceId, viewType, selectedPeriod],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.id) return [];
+      if (!currentWorkspaceId) return [];
 
       let startDate: Date;
       let endDate: Date;
-      const now = new Date();
 
       if (viewType === 'daily') {
         const daysOffset = Math.abs(selectedPeriod) + 1;
@@ -239,18 +218,20 @@ export default function Home() {
       }
 
       const { data } = await supabase
-        .from("chats")
+        .from("messages")
         .select("created_at")
-        .eq("user_id", user.id)
+        .eq("workspace_id", currentWorkspaceId)
+        .eq("direction", "inbound")
         .gte("created_at", startDate.toISOString())
         .lt("created_at", endDate.toISOString());
 
       return data || [];
     },
+    enabled: !!currentWorkspaceId,
   });
 
   const currentTotal = chartDataProcessed.reduce((sum, item) => sum + item.count, 0);
-  const previousTotal = previousPeriodData?.length || 0;
+  const previousTotal = previousMessageData?.length || 0;
   const percentageChange = previousTotal > 0 ? ((currentTotal - previousTotal) / previousTotal) * 100 : 0;
   
   const getPeriodLabel = (offset: number) => {
@@ -278,10 +259,10 @@ export default function Home() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Welcome, {profile?.business_name || 'User'}</h1>
+        <h1 className="text-3xl font-bold">Welcome, {workspace?.name || 'User'}</h1>
         <p className="text-muted-foreground mt-1">{dateStr} (WIB)</p>
         <p className="text-sm text-muted-foreground mt-2">
-          Monitor chats, human interventions, and payment flows powered by Vlowchat AI.
+          Monitor chats, human interventions, and payment flows powered by AI.
         </p>
       </div>
 
@@ -322,7 +303,7 @@ export default function Home() {
                     <TrendingUp className="w-5 h-5" />
                     Chats Analytics
                   </CardTitle>
-                  <CardDescription>{getPeriodLabel(selectedPeriod)} - Conversation volume</CardDescription>
+                  <CardDescription>{getPeriodLabel(selectedPeriod)} - Inbound messages</CardDescription>
                 </div>
                 <Button
                   variant="outline"
@@ -407,7 +388,7 @@ export default function Home() {
                     dataKey="count" 
                     stroke="hsl(var(--primary))" 
                     strokeWidth={2}
-                    name="Chats"
+                    name="Messages"
                     dot={{ fill: 'hsl(var(--primary))' }}
                   />
                 </LineChart>
@@ -434,7 +415,7 @@ export default function Home() {
                   <Bar 
                     dataKey="count" 
                     fill="hsl(var(--primary))"
-                    name="Chats"
+                    name="Messages"
                     radius={[8, 8, 0, 0]}
                   />
                 </BarChart>
@@ -443,23 +424,29 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        {/* Top Issue & System Status */}
+        {/* System Status */}
         <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5" />
-                Top Issue This Week
+                Quick Stats
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                <Badge variant="secondary" className="text-sm">
-                  Payment Confirmation
-                </Badge>
-                <p className="text-sm text-muted-foreground">
-                  Most common issue requiring attention this week
-                </p>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Chats requiring attention</span>
+                  <Badge variant={stats?.needsActionChats ? "destructive" : "secondary"}>
+                    {stats?.needsActionChats || 0}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Pending payments</span>
+                  <Badge variant={stats?.paymentAlerts ? "default" : "secondary"}>
+                    {stats?.paymentAlerts || 0}
+                  </Badge>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -473,83 +460,30 @@ export default function Home() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm">Vlowchat AI</span>
+                <span className="text-sm">AI Agent</span>
                 <Badge variant="default" className="bg-success text-success-foreground">
                   <CheckCircle2 className="w-3 h-3 mr-1" />
                   Online
                 </Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm">Webhook Events</span>
-                <Badge variant="default" className="bg-success text-success-foreground">
-                  <CheckCircle2 className="w-3 h-3 mr-1" />
-                  Active
-                </Badge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm">WhatsApp Channel</span>
+                <span className="text-sm">WhatsApp API</span>
                 <Badge variant="default" className="bg-success text-success-foreground">
                   <CheckCircle2 className="w-3 h-3 mr-1" />
                   Connected
                 </Badge>
               </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>What's New</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2 text-sm">
-                <li className="flex items-start gap-2">
-                  <span className="text-primary mt-1">•</span>
-                  <span>AI chatbot now supports Indonesian language detection</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-primary mt-1">•</span>
-                  <span>Payment alert system with auto-detection</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-primary mt-1">•</span>
-                  <span>Quick reply templates for faster responses</span>
-                </li>
-              </ul>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Website Widget</span>
+                <Badge variant="default" className="bg-success text-success-foreground">
+                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                  Active
+                </Badge>
+              </div>
             </CardContent>
           </Card>
         </div>
       </div>
-
-      {/* Key Insights */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="w-5 h-5" />
-            Key Insights
-          </CardTitle>
-          <CardDescription>Performance metrics for {getPeriodLabel(selectedPeriod).toLowerCase()}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Peak hours</p>
-              <p className="text-2xl font-bold">2pm - 4pm</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Avg. response time</p>
-              <p className="text-2xl font-bold">2.5 mins</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Resolution rate</p>
-              <p className="text-2xl font-bold">94%</p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Customer satisfaction</p>
-              <p className="text-2xl font-bold">4.8/5.0</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
