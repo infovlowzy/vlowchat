@@ -112,6 +112,37 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // 1. Require authentication
+    const authHeader = req.headers.get('authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.error('Missing or invalid authorization header')
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const whatsappToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN')
+    const whatsappPhoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')
+
+    // 2. Create Supabase client and verify user token
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    
+    if (authError || !user) {
+      console.error('Invalid auth token:', authError?.message)
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    console.log('Authenticated user:', user.id)
+
     // Parse JSON with error handling
     let rawPayload: unknown
     try {
@@ -138,20 +169,23 @@ Deno.serve(async (req) => {
     }
 
     const payload = validation.data
+
+    // 3. Validate sender_user_id matches authenticated user (if provided)
+    if (payload.sender_user_id && payload.sender_user_id !== user.id) {
+      console.error('Sender mismatch: provided', payload.sender_user_id, 'authenticated', user.id)
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
     console.log('Sending WhatsApp message:', JSON.stringify({
       chat_id: payload.chat_id,
       message_length: payload.message.length,
-      has_sender: !!payload.sender_user_id,
+      sender_user_id: user.id,
     }))
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    const whatsappToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN')
-    const whatsappPhoneNumberId = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID')
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-    // Get chat with contact info
+    // 4. Get chat with contact info
     const { data: chat, error: chatError } = await supabase
       .from('chats')
       .select(`
@@ -166,6 +200,22 @@ Deno.serve(async (req) => {
       console.error('Chat not found:', chatError)
       return new Response(JSON.stringify({ error: 'Chat not found' }), {
         status: 404,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // 5. Verify workspace membership - ensure user belongs to the workspace
+    const { data: membership, error: membershipError } = await supabase
+      .from('workspace_users')
+      .select('id')
+      .eq('workspace_id', chat.workspace_id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (membershipError || !membership) {
+      console.error('User not a member of workspace:', membershipError?.message || 'No membership found')
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
@@ -213,8 +263,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Determine sender type
-    const senderType = payload.sender_user_id ? 'human' : 'ai'
+    // Sender is always the authenticated user (human)
+    const senderType = 'human'
 
     // Store the outbound message
     const { data: message, error: messageError } = await supabase
@@ -225,7 +275,7 @@ Deno.serve(async (req) => {
         contact_id: contactData.id,
         direction: 'outbound',
         sender_type: senderType,
-        sender_user_id: payload.sender_user_id || null,
+        sender_user_id: user.id, // Always use authenticated user
         content_type: 'text',
         text: payload.message,
         wa_message_id: waMessageId,
