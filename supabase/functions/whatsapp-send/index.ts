@@ -1,8 +1,39 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+// For production, restrict CORS to your application domain
+// Development origins can be added conditionally
+const ALLOWED_ORIGINS = [
+  'https://lovable.dev',
+  'https://id-preview--[a-zA-Z0-9-]+\\.lovable\\.app', // Preview domains pattern
+]
+
+// Check if origin is allowed (supports regex patterns)
+function isOriginAllowed(origin: string | null): boolean {
+  if (!origin) return false
+  
+  // Allow localhost for development
+  if (origin.startsWith('http://localhost:')) return true
+  
+  // Check against allowed origins (some may be regex patterns)
+  return ALLOWED_ORIGINS.some(allowed => {
+    if (allowed.includes('[')) {
+      // It's a regex pattern
+      const regex = new RegExp(`^${allowed}$`)
+      return regex.test(origin)
+    }
+    return origin === allowed || origin.endsWith('.lovable.app') || origin.endsWith('.lovable.dev')
+  })
+}
+
+function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get('origin')
+  const allowedOrigin = isOriginAllowed(origin) ? origin : null
+  
+  return {
+    'Access-Control-Allow-Origin': allowedOrigin || '',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Credentials': 'true',
+  }
 }
 
 // Input validation constants
@@ -56,9 +87,21 @@ function validatePayload(payload: unknown): { valid: boolean; error?: string; da
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req)
+  
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
+  }
+
+  // Check origin for non-OPTIONS requests
+  const origin = req.headers.get('origin')
+  if (!isOriginAllowed(origin)) {
+    console.error('Request from unauthorized origin:', origin)
+    return new Response('Forbidden', { 
+      status: 403,
+      headers: corsHeaders 
+    })
   }
 
   if (req.method !== 'POST') {
