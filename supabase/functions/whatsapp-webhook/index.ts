@@ -5,6 +5,19 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Minimum secret lengths for security validation
+const SECRET_REQUIREMENTS = {
+  WHATSAPP_APP_SECRET: 32,
+  WHATSAPP_VERIFY_TOKEN: 16,
+  SUPABASE_SERVICE_ROLE_KEY: 40,
+} as const
+
+// Validate that a secret meets minimum security requirements
+function validateSecretStrength(name: keyof typeof SECRET_REQUIREMENTS, value: string | undefined): boolean {
+  if (!value) return false
+  return value.length >= SECRET_REQUIREMENTS[name]
+}
+
 // Verify WhatsApp webhook signature using HMAC-SHA256
 async function verifyWebhookSignature(payload: string, signature: string, secret: string): Promise<boolean> {
   if (!signature || !secret) {
@@ -97,6 +110,15 @@ Deno.serve(async (req) => {
 
     const verifyToken = Deno.env.get('WHATSAPP_VERIFY_TOKEN')
 
+    // Validate verify token strength
+    if (!validateSecretStrength('WHATSAPP_VERIFY_TOKEN', verifyToken)) {
+      console.error('WHATSAPP_VERIFY_TOKEN not configured or too weak')
+      return new Response('Unauthorized', { 
+        status: 401,
+        headers: corsHeaders 
+      })
+    }
+
     if (mode === 'subscribe' && token === verifyToken) {
       console.log('WhatsApp webhook verified successfully')
       return new Response(challenge, { 
@@ -122,10 +144,11 @@ Deno.serve(async (req) => {
       const signature = req.headers.get('x-hub-signature-256')
       const appSecret = Deno.env.get('WHATSAPP_APP_SECRET')
       
-      if (!appSecret) {
-        console.error('WHATSAPP_APP_SECRET not configured')
-        return new Response('Server configuration error', { 
-          status: 500,
+      // Validate app secret exists and meets minimum strength requirements
+      if (!validateSecretStrength('WHATSAPP_APP_SECRET', appSecret)) {
+        console.error('WHATSAPP_APP_SECRET not configured or does not meet security requirements')
+        return new Response('Unauthorized', { 
+          status: 401,
           headers: corsHeaders 
         })
       }
@@ -138,7 +161,7 @@ Deno.serve(async (req) => {
         })
       }
       
-      const isValidSignature = await verifyWebhookSignature(rawBody, signature, appSecret)
+      const isValidSignature = await verifyWebhookSignature(rawBody, signature, appSecret!)
       if (!isValidSignature) {
         console.error('Invalid webhook signature')
         return new Response('Unauthorized - Invalid signature', { 
@@ -160,9 +183,19 @@ Deno.serve(async (req) => {
         })
       }
 
-      const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-      const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+      
+      // Validate service key strength
+      if (!supabaseUrl || !validateSecretStrength('SUPABASE_SERVICE_ROLE_KEY', supabaseServiceKey)) {
+        console.error('Supabase configuration invalid or service key too weak')
+        return new Response('Unauthorized', { 
+          status: 401,
+          headers: corsHeaders 
+        })
+      }
+      
+      const supabase = createClient(supabaseUrl, supabaseServiceKey!)
 
       // Process each entry
       for (const entry of payload.entry) {
