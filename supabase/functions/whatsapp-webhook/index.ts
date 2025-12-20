@@ -5,6 +5,42 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Verify WhatsApp webhook signature using HMAC-SHA256
+async function verifyWebhookSignature(payload: string, signature: string, secret: string): Promise<boolean> {
+  if (!signature || !secret) {
+    console.error('Missing signature or secret for webhook verification')
+    return false
+  }
+  
+  try {
+    const encoder = new TextEncoder()
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    )
+    
+    const signatureBuffer = await crypto.subtle.sign('HMAC', key, encoder.encode(payload))
+    const hashArray = Array.from(new Uint8Array(signatureBuffer))
+    const expectedSignature = 'sha256=' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+    
+    // Use timing-safe comparison to prevent timing attacks
+    if (signature.length !== expectedSignature.length) {
+      return false
+    }
+    let result = 0
+    for (let i = 0; i < signature.length; i++) {
+      result |= signature.charCodeAt(i) ^ expectedSignature.charCodeAt(i)
+    }
+    return result === 0
+  } catch (error) {
+    console.error('Error verifying webhook signature:', error)
+    return false
+  }
+}
+
 interface WhatsAppMessage {
   from: string
   id: string
@@ -79,7 +115,41 @@ Deno.serve(async (req) => {
   // Handle incoming messages (POST request)
   if (req.method === 'POST') {
     try {
-      const payload: WhatsAppWebhookPayload = await req.json()
+      // Get raw body for signature verification
+      const rawBody = await req.text()
+      
+      // Verify WhatsApp signature
+      const signature = req.headers.get('x-hub-signature-256')
+      const appSecret = Deno.env.get('WHATSAPP_APP_SECRET')
+      
+      if (!appSecret) {
+        console.error('WHATSAPP_APP_SECRET not configured')
+        return new Response('Server configuration error', { 
+          status: 500,
+          headers: corsHeaders 
+        })
+      }
+      
+      if (!signature) {
+        console.error('Missing x-hub-signature-256 header')
+        return new Response('Unauthorized - Missing signature', { 
+          status: 401,
+          headers: corsHeaders 
+        })
+      }
+      
+      const isValidSignature = await verifyWebhookSignature(rawBody, signature, appSecret)
+      if (!isValidSignature) {
+        console.error('Invalid webhook signature')
+        return new Response('Unauthorized - Invalid signature', { 
+          status: 401,
+          headers: corsHeaders 
+        })
+      }
+      
+      console.log('WhatsApp webhook signature verified successfully')
+      
+      const payload: WhatsAppWebhookPayload = JSON.parse(rawBody)
       console.log('Received WhatsApp webhook:', JSON.stringify(payload, null, 2))
 
       // Validate it's from WhatsApp
