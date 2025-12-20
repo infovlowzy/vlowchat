@@ -53,12 +53,15 @@ export function useChats() {
 
         const status = (chat.current_status ?? "ai") as ChatStatus;
 
-        const mode =
+        // Determine mode from last message sender type
+        const mode: 'ai' | 'admin' =
           lastMessage?.sender_type === "ai"
             ? "ai"
             : "admin";
 
-        const channel: Channel = "whatsapp";
+        // Determine channel from phone number prefix
+        const phoneNumber = chat.contact?.phone_number || "";
+        const channel: Channel = phoneNumber.startsWith("web-") ? "web" : "whatsapp";
 
         return {
           id: chat.id,
@@ -66,6 +69,7 @@ export function useChats() {
           customerAvatar: null,
           channel,
           status,
+          current_status: status, // Add for compatibility
           mode,
           lastMessage: lastMessage?.text ?? "",
           lastMessageTime: lastMessage?.created_at ?? chat.last_message_at,

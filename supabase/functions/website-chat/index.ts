@@ -5,6 +5,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Input validation constants
+const MAX_MESSAGE_LENGTH = 5000
+const MAX_VISITOR_ID_LENGTH = 100
+const MAX_VISITOR_NAME_LENGTH = 100
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 interface WebsiteChatMessage {
   workspace_id: string
   visitor_id: string
@@ -12,6 +18,85 @@ interface WebsiteChatMessage {
   message: string
   content_type?: 'text' | 'image' | 'document'
   media_url?: string
+}
+
+// Validate and sanitize input
+function validatePayload(payload: unknown): { valid: boolean; error?: string; data?: WebsiteChatMessage } {
+  if (!payload || typeof payload !== 'object') {
+    return { valid: false, error: 'Invalid request body' }
+  }
+
+  const p = payload as Record<string, unknown>
+
+  // Validate workspace_id - must be valid UUID
+  if (typeof p.workspace_id !== 'string' || !UUID_REGEX.test(p.workspace_id)) {
+    return { valid: false, error: 'Invalid workspace_id format - must be a valid UUID' }
+  }
+
+  // Validate visitor_id
+  if (typeof p.visitor_id !== 'string' || p.visitor_id.trim().length === 0) {
+    return { valid: false, error: 'visitor_id is required and must be a non-empty string' }
+  }
+  if (p.visitor_id.length > MAX_VISITOR_ID_LENGTH) {
+    return { valid: false, error: `visitor_id must be at most ${MAX_VISITOR_ID_LENGTH} characters` }
+  }
+
+  // Validate message
+  if (typeof p.message !== 'string' || p.message.trim().length === 0) {
+    return { valid: false, error: 'message is required and must be a non-empty string' }
+  }
+  if (p.message.length > MAX_MESSAGE_LENGTH) {
+    return { valid: false, error: `message must be at most ${MAX_MESSAGE_LENGTH} characters` }
+  }
+
+  // Validate optional visitor_name
+  let visitorName: string | undefined
+  if (p.visitor_name !== undefined) {
+    if (typeof p.visitor_name !== 'string') {
+      return { valid: false, error: 'visitor_name must be a string' }
+    }
+    if (p.visitor_name.length > MAX_VISITOR_NAME_LENGTH) {
+      return { valid: false, error: `visitor_name must be at most ${MAX_VISITOR_NAME_LENGTH} characters` }
+    }
+    visitorName = p.visitor_name.trim() || undefined
+  }
+
+  // Validate optional content_type
+  const validContentTypes = ['text', 'image', 'document']
+  let contentType: 'text' | 'image' | 'document' = 'text'
+  if (p.content_type !== undefined) {
+    if (typeof p.content_type !== 'string' || !validContentTypes.includes(p.content_type)) {
+      return { valid: false, error: 'content_type must be one of: text, image, document' }
+    }
+    contentType = p.content_type as 'text' | 'image' | 'document'
+  }
+
+  // Validate optional media_url
+  let mediaUrl: string | undefined
+  if (p.media_url !== undefined) {
+    if (typeof p.media_url !== 'string') {
+      return { valid: false, error: 'media_url must be a string' }
+    }
+    // Basic URL validation
+    try {
+      new URL(p.media_url)
+      mediaUrl = p.media_url
+    } catch {
+      return { valid: false, error: 'media_url must be a valid URL' }
+    }
+  }
+
+  return {
+    valid: true,
+    data: {
+      workspace_id: p.workspace_id,
+      visitor_id: p.visitor_id.trim(),
+      visitor_name: visitorName,
+      message: p.message.trim(),
+      content_type: contentType,
+      media_url: mediaUrl,
+    }
+  }
 }
 
 Deno.serve(async (req) => {
@@ -28,18 +113,37 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const payload: WebsiteChatMessage = await req.json()
-    console.log('Received website chat message:', JSON.stringify(payload, null, 2))
-
-    // Validate required fields
-    if (!payload.workspace_id || !payload.visitor_id || !payload.message) {
+    // Parse JSON with error handling
+    let rawPayload: unknown
+    try {
+      rawPayload = await req.json()
+    } catch {
       return new Response(JSON.stringify({ 
-        error: 'Missing required fields: workspace_id, visitor_id, message' 
+        error: 'Invalid JSON in request body' 
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
+
+    // Validate payload
+    const validation = validatePayload(rawPayload)
+    if (!validation.valid || !validation.data) {
+      console.error('Validation failed:', validation.error)
+      return new Response(JSON.stringify({ 
+        error: validation.error 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const payload = validation.data
+    console.log('Received validated website chat message:', JSON.stringify({
+      workspace_id: payload.workspace_id,
+      visitor_id: payload.visitor_id,
+      message_length: payload.message.length,
+    }))
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -167,8 +271,7 @@ Deno.serve(async (req) => {
     })
   } catch (error) {
     console.error('Error processing website chat:', error)
-    const errMessage = error instanceof Error ? error.message : 'Unknown error'
-    return new Response(JSON.stringify({ error: errMessage }), {
+    return new Response(JSON.stringify({ error: 'Internal server error' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
