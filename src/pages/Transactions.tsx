@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useInvoices, useUpdateInvoiceStatus, useTodayPaidCount } from '@/hooks/useInvoices';
 import { useAuth } from '@/hooks/useAuth';
+import { InvoicePreviewDialog } from '@/components/invoices/InvoicePreviewDialog';
 import type { Invoice } from '@/types';
 
 type ChannelFilter = 'all' | 'whatsapp' | 'web';
@@ -33,6 +34,8 @@ export default function Transactions() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState<ChannelFilter>('all');
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   
   // Fetch invoices by status
   const { data: triggeredInvoices = [], isLoading: loadingTriggered } = useInvoices('waiting_for_payment');
@@ -128,11 +131,8 @@ export default function Transactions() {
   };
 
   const handleOpenInvoice = (invoiceId: string) => {
-    // TODO: Navigate to invoice detail page
-    toast({
-      title: 'Open Invoice',
-      description: `Invoice detail page coming soon. ID: ${invoiceId.slice(0, 8)}...`
-    });
+    setSelectedInvoiceId(invoiceId);
+    setInvoiceDialogOpen(true);
   };
 
   const getChannelBadge = (phoneNumber: string) => {
@@ -443,6 +443,13 @@ export default function Transactions() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Invoice Preview Dialog */}
+      <InvoicePreviewDialog
+        invoiceId={selectedInvoiceId}
+        open={invoiceDialogOpen}
+        onOpenChange={setInvoiceDialogOpen}
+      />
     </div>
   );
 }

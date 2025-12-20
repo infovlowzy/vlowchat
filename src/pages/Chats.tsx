@@ -11,18 +11,19 @@ import { ChatDetail } from '@/components/chats/ChatDetail';
 import { useChats } from '@/hooks/useChats';
 import { useMessages } from '@/hooks/useMessages';
 
+type TabValue = 'ai' | 'needs_action' | 'human' | 'resolved';
+
 export default function Chats() {
   const { data: chats = [], isLoading } = useChats();
-  const [selectedTab, setSelectedTab] = useState<'all' | 'needs-action' | 'resolved'>('all');
+  const [selectedTab, setSelectedTab] = useState<TabValue>('ai');
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState<Channel | 'all'>('all');
   const { data: messages = [] } = useMessages(selectedChatId);
 
   const filteredChats = chats.filter(chat => {
-    // Tab filter
-    if (selectedTab === 'needs-action' && chat.status !== 'needs_action') return false;
-    if (selectedTab === 'resolved' && chat.status !== 'resolved') return false;
+    // Tab filter - now filtering by current_status directly
+    if (chat.current_status !== selectedTab) return false;
     
     // Channel filter
     if (channelFilter !== 'all' && chat.channel !== channelFilter) return false;
@@ -37,6 +38,9 @@ export default function Chats() {
   });
 
   const selectedChat = chats.find(c => c.id === selectedChatId);
+
+  // Count chats per status
+  const countByStatus = (status: TabValue) => chats.filter(c => c.current_status === status).length;
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
@@ -104,18 +108,35 @@ export default function Chats() {
       {/* Middle Column: Chat List */}
       <div className="w-96 flex flex-col bg-card rounded-lg border">
         <div className="p-4 border-b">
-          <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as any)}>
-            <TabsList className="w-full">
-              <TabsTrigger value="all" className="flex-1">All Chats</TabsTrigger>
-              <TabsTrigger value="needs-action" className="flex-1">
-                Needs Action
-                {chats.filter(c => c.status === 'needs_action').length > 0 && (
-                  <Badge variant="secondary" className="ml-1.5 h-5 px-1.5">
-                    {chats.filter(c => c.status === 'needs_action').length}
+          <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as TabValue)}>
+            <TabsList className="w-full grid grid-cols-4">
+              <TabsTrigger value="ai" className="text-xs px-2">
+                AI
+                {countByStatus('ai') > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                    {countByStatus('ai')}
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="resolved" className="flex-1">Resolved</TabsTrigger>
+              <TabsTrigger value="needs_action" className="text-xs px-2">
+                Action
+                {countByStatus('needs_action') > 0 && (
+                  <Badge variant="destructive" className="ml-1 h-5 px-1.5 text-xs">
+                    {countByStatus('needs_action')}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="human" className="text-xs px-2">
+                Ongoing
+                {countByStatus('human') > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                    {countByStatus('human')}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="resolved" className="text-xs px-2">
+                Resolved
+              </TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
