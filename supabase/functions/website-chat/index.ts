@@ -196,27 +196,64 @@ async function checkRateLimit(
   return { exceeded: false, remaining: RATE_LIMIT_MAX_REQUESTS - existing.request_count - 1 }
 }
 
-// Validate origin against allowed origins
-function validateOrigin(origin: string | null, allowedOrigins: string[] | null): boolean {
-  // If no allowed origins configured, allow all (backwards compatibility)
+// Validate origin against allowed origins - STRICT MODE
+function validateOrigin(origin: string | null, allowedOrigins: string[] | null): { valid: boolean; requiresApiKey: boolean } {
+  // If no allowed origins configured, require API key authentication
   if (!allowedOrigins || allowedOrigins.length === 0) {
-    return true
+    return { valid: true, requiresApiKey: true }
   }
 
   if (!origin) {
-    return false
+    return { valid: false, requiresApiKey: false }
   }
 
-  // Check if origin matches any allowed origin (with wildcard support)
-  return allowedOrigins.some(allowed => {
-    if (allowed === '*') return true
-    if (allowed.startsWith('*.')) {
-      // Wildcard subdomain match
-      const domain = allowed.slice(2)
-      return origin.endsWith(domain) || origin === `https://${domain}` || origin === `http://${domain}`
+  // Parse origin to get hostname
+  let originHostname: string
+  try {
+    const originUrl = new URL(origin)
+    originHostname = originUrl.hostname
+    
+    // Enforce HTTPS in production (allow http only for localhost)
+    if (originUrl.protocol !== 'https:' && !originHostname.includes('localhost') && originHostname !== '127.0.0.1') {
+      console.warn('Rejected non-HTTPS origin:', origin)
+      return { valid: false, requiresApiKey: false }
     }
-    return origin === allowed
+  } catch {
+    return { valid: false, requiresApiKey: false }
+  }
+
+  // Check if origin matches any allowed origin (with secure wildcard support)
+  const isValid = allowedOrigins.some(allowed => {
+    // Disallow broad wildcard '*' - too permissive for production
+    if (allowed === '*') {
+      console.warn('Wildcard "*" origin found - treating as requiresApiKey')
+      return false
+    }
+    
+    if (allowed.startsWith('*.')) {
+      // Secure wildcard subdomain match - must be exact subdomain, not suffix
+      const domain = allowed.slice(2).toLowerCase()
+      const lowerHostname = originHostname.toLowerCase()
+      // Match exact domain or proper subdomain (e.g., *.example.com matches sub.example.com but NOT attacker-example.com)
+      return lowerHostname === domain || lowerHostname.endsWith('.' + domain)
+    }
+    
+    // Exact match - parse allowed origin to compare hostnames
+    try {
+      const allowedUrl = new URL(allowed)
+      return origin === allowed || originHostname === allowedUrl.hostname
+    } catch {
+      // If allowed origin is just a hostname, compare directly
+      return originHostname === allowed.toLowerCase()
+    }
   })
+
+  // If origin doesn't match allowed list but list contains '*', require API key
+  if (!isValid && allowedOrigins.includes('*')) {
+    return { valid: true, requiresApiKey: true }
+  }
+
+  return { valid: isValid, requiresApiKey: false }
 }
 
 Deno.serve(async (req) => {
@@ -289,9 +326,36 @@ Deno.serve(async (req) => {
 
     const typedWorkspace = workspace as Workspace
 
-    // Validate API key if workspace has one configured
-    if (typedWorkspace.widget_api_key_hash) {
+    // Validate origin first
+    const originValidation = validateOrigin(origin, typedWorkspace.widget_allowed_origins)
+    if (!originValidation.valid) {
+      console.error('Origin not allowed:', origin, 'for workspace:', payload.workspace_id)
+      return new Response(JSON.stringify({ error: 'Forbidden - Origin not allowed' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Determine if API key is required
+    // API key is REQUIRED if:
+    // 1. Workspace has API key configured, OR
+    // 2. Origin validation indicates API key is needed (no allowed origins or wildcard)
+    const apiKeyRequired = typedWorkspace.widget_api_key_hash || originValidation.requiresApiKey
+
+    if (apiKeyRequired) {
       const apiKey = req.headers.get('x-workspace-key')
+      
+      // If workspace doesn't have API key configured but one is required, reject
+      if (!typedWorkspace.widget_api_key_hash) {
+        console.error('Workspace requires API key configuration:', payload.workspace_id)
+        return new Response(JSON.stringify({ 
+          error: 'Unauthorized - Workspace not configured for website chat. Please configure API key and allowed origins.' 
+        }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
       if (!apiKey) {
         console.error('Missing API key for workspace:', payload.workspace_id)
         return new Response(JSON.stringify({ error: 'Unauthorized - API key required' }), {
@@ -310,16 +374,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Validate origin if allowed origins are configured
-    if (!validateOrigin(origin, typedWorkspace.widget_allowed_origins)) {
-      console.error('Origin not allowed:', origin, 'for workspace:', payload.workspace_id)
-      return new Response(JSON.stringify({ error: 'Forbidden - Origin not allowed' }), {
-        status: 403,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
-    }
-
-    // Check rate limit
+    // Check rate limit (workspace-level + visitor-level)
     const rateLimit = await checkRateLimit(supabase, payload.workspace_id, payload.visitor_id)
     if (rateLimit.exceeded) {
       console.error('Rate limit exceeded for visitor:', payload.visitor_id, 'workspace:', payload.workspace_id)

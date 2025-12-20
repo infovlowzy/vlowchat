@@ -295,20 +295,48 @@ Deno.serve(async (req) => {
               continue
             }
 
-            // Update chat with last message time and increment unread
+            // Update chat with last message time and increment unread count
             const currentStatus = chat!.current_status
-            const { error: updateChatError } = await supabase
-              .from('chats')
-              .update({
-                last_message_at: new Date().toISOString(),
-                unread_count_for_human: (currentStatus === 'human' || currentStatus === 'needs_action') 
-                  ? supabase.rpc('increment_unread', { chat_id: chat!.id })
-                  : 0,
-              })
-              .eq('id', chat!.id)
+            const shouldIncrementUnread = currentStatus === 'human' || currentStatus === 'needs_action'
+            
+            if (shouldIncrementUnread) {
+              // First get current unread count
+              const { data: currentChat, error: fetchError } = await supabase
+                .from('chats')
+                .select('unread_count_for_human')
+                .eq('id', chat!.id)
+                .single()
+              
+              if (fetchError) {
+                console.error('Error fetching current chat for unread increment:', fetchError)
+              }
+              
+              const currentUnread = currentChat?.unread_count_for_human || 0
+              
+              const { error: updateChatError } = await supabase
+                .from('chats')
+                .update({
+                  last_message_at: new Date().toISOString(),
+                  unread_count_for_human: currentUnread + 1,
+                })
+                .eq('id', chat!.id)
 
-            if (updateChatError) {
-              console.error('Error updating chat:', updateChatError)
+              if (updateChatError) {
+                console.error('Error updating chat with incremented unread:', updateChatError)
+              }
+            } else {
+              // Reset unread count for AI-handled chats
+              const { error: updateChatError } = await supabase
+                .from('chats')
+                .update({
+                  last_message_at: new Date().toISOString(),
+                  unread_count_for_human: 0,
+                })
+                .eq('id', chat!.id)
+
+              if (updateChatError) {
+                console.error('Error updating chat:', updateChatError)
+              }
             }
 
             console.log(`Message ${message.id} processed successfully for chat ${chat!.id}`)
