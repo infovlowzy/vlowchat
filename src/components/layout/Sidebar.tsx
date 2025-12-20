@@ -1,4 +1,5 @@
-import { Home, MessageSquare, Receipt, Settings, ChevronLeft } from 'lucide-react';
+import { Home, MessageSquare, Receipt, Settings, ChevronLeft, LogOut } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 import { NavLink } from '@/components/NavLink';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +13,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, onToggle, unreadChats, pendingTransactions }: SidebarProps) {
+  const { signOut } = useAuth();
+  
   const navItems = [
     { icon: Home, label: 'Home', path: '/', badge: undefined },
     { icon: MessageSquare, label: 'Chats', path: '/chats', badge: unreadChats },
@@ -82,9 +85,21 @@ export function Sidebar({ collapsed, onToggle, unreadChats, pendingTransactions 
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-border">
+      <div className="p-3 border-t border-border space-y-2">
+        <Button
+          variant="ghost"
+          size={collapsed ? "icon" : "default"}
+          onClick={signOut}
+          className={cn(
+            'w-full text-muted-foreground hover:text-destructive hover:bg-destructive/10',
+            collapsed && 'h-10 w-10 mx-auto'
+          )}
+        >
+          <LogOut className="w-4 h-4" />
+          {!collapsed && <span className="ml-2">Logout</span>}
+        </Button>
         {!collapsed && (
-          <div className="text-xs text-muted-foreground text-center">
+          <div className="text-xs text-muted-foreground text-center pt-2">
             <p>Powered by Vlowzy AI</p>
             <p className="mt-1">© 2025 All rights reserved</p>
           </div>
