@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-workspace-key',
 }
 
 // Input validation constants
@@ -11,6 +11,10 @@ const MAX_VISITOR_ID_LENGTH = 100
 const MAX_VISITOR_NAME_LENGTH = 100
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
+// Rate limiting constants
+const RATE_LIMIT_WINDOW_MS = 60000 // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 10 // 10 requests per minute per visitor
+
 interface WebsiteChatMessage {
   workspace_id: string
   visitor_id: string
@@ -18,6 +22,21 @@ interface WebsiteChatMessage {
   message: string
   content_type?: 'text' | 'image' | 'document'
   media_url?: string
+}
+
+interface Workspace {
+  id: string
+  widget_api_key_hash: string | null
+  widget_allowed_origins: string[] | null
+}
+
+// Simple hash comparison (for API key verification)
+async function hashApiKey(apiKey: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(apiKey)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
 // Validate and sanitize input
@@ -99,6 +118,107 @@ function validatePayload(payload: unknown): { valid: boolean; error?: string; da
   }
 }
 
+// Check rate limit for visitor
+async function checkRateLimit(
+  supabase: any,
+  workspaceId: string,
+  visitorId: string
+): Promise<{ exceeded: boolean; remaining: number }> {
+  const now = new Date()
+  const windowStart = new Date(now.getTime() - RATE_LIMIT_WINDOW_MS)
+
+  // Try to get existing rate limit record
+  const { data: existing, error: fetchError } = await supabase
+    .from('website_chat_rate_limits')
+    .select('id, request_count, window_start')
+    .eq('workspace_id', workspaceId)
+    .eq('visitor_id', visitorId)
+    .maybeSingle()
+
+  if (fetchError) {
+    console.error('Error checking rate limit:', fetchError)
+    // Fail open - allow request if we can't check rate limit
+    return { exceeded: false, remaining: RATE_LIMIT_MAX_REQUESTS }
+  }
+
+  if (!existing) {
+    // Create new rate limit record
+    const { error: insertError } = await supabase
+      .from('website_chat_rate_limits')
+      .insert({
+        workspace_id: workspaceId,
+        visitor_id: visitorId,
+        request_count: 1,
+        window_start: now.toISOString(),
+      })
+
+    if (insertError) {
+      console.error('Error creating rate limit record:', insertError)
+    }
+    return { exceeded: false, remaining: RATE_LIMIT_MAX_REQUESTS - 1 }
+  }
+
+  const existingWindowStart = new Date(existing.window_start)
+  
+  if (existingWindowStart < windowStart) {
+    // Window has expired, reset counter
+    const { error: updateError } = await supabase
+      .from('website_chat_rate_limits')
+      .update({
+        request_count: 1,
+        window_start: now.toISOString(),
+      })
+      .eq('id', existing.id)
+
+    if (updateError) {
+      console.error('Error resetting rate limit:', updateError)
+    }
+    return { exceeded: false, remaining: RATE_LIMIT_MAX_REQUESTS - 1 }
+  }
+
+  // Check if limit exceeded
+  if (existing.request_count >= RATE_LIMIT_MAX_REQUESTS) {
+    return { exceeded: true, remaining: 0 }
+  }
+
+  // Increment counter
+  const { error: updateError } = await supabase
+    .from('website_chat_rate_limits')
+    .update({
+      request_count: existing.request_count + 1,
+    })
+    .eq('id', existing.id)
+
+  if (updateError) {
+    console.error('Error incrementing rate limit:', updateError)
+  }
+
+  return { exceeded: false, remaining: RATE_LIMIT_MAX_REQUESTS - existing.request_count - 1 }
+}
+
+// Validate origin against allowed origins
+function validateOrigin(origin: string | null, allowedOrigins: string[] | null): boolean {
+  // If no allowed origins configured, allow all (backwards compatibility)
+  if (!allowedOrigins || allowedOrigins.length === 0) {
+    return true
+  }
+
+  if (!origin) {
+    return false
+  }
+
+  // Check if origin matches any allowed origin (with wildcard support)
+  return allowedOrigins.some(allowed => {
+    if (allowed === '*') return true
+    if (allowed.startsWith('*.')) {
+      // Wildcard subdomain match
+      const domain = allowed.slice(2)
+      return origin.endsWith(domain) || origin === `https://${domain}` || origin === `http://${domain}`
+    }
+    return origin === allowed
+  })
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -113,6 +233,9 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Get origin for validation
+    const origin = req.headers.get('origin')
+
     // Parse JSON with error handling
     let rawPayload: unknown
     try {
@@ -149,10 +272,10 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // Verify workspace exists
+    // Verify workspace exists and get security settings
     const { data: workspace, error: workspaceError } = await supabase
       .from('workspaces')
-      .select('id')
+      .select('id, widget_api_key_hash, widget_allowed_origins')
       .eq('id', payload.workspace_id)
       .single()
 
@@ -161,6 +284,55 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Workspace not found' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const typedWorkspace = workspace as Workspace
+
+    // Validate API key if workspace has one configured
+    if (typedWorkspace.widget_api_key_hash) {
+      const apiKey = req.headers.get('x-workspace-key')
+      if (!apiKey) {
+        console.error('Missing API key for workspace:', payload.workspace_id)
+        return new Response(JSON.stringify({ error: 'Unauthorized - API key required' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+
+      const providedHash = await hashApiKey(apiKey)
+      if (providedHash !== typedWorkspace.widget_api_key_hash) {
+        console.error('Invalid API key for workspace:', payload.workspace_id)
+        return new Response(JSON.stringify({ error: 'Unauthorized - Invalid API key' }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        })
+      }
+    }
+
+    // Validate origin if allowed origins are configured
+    if (!validateOrigin(origin, typedWorkspace.widget_allowed_origins)) {
+      console.error('Origin not allowed:', origin, 'for workspace:', payload.workspace_id)
+      return new Response(JSON.stringify({ error: 'Forbidden - Origin not allowed' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Check rate limit
+    const rateLimit = await checkRateLimit(supabase, payload.workspace_id, payload.visitor_id)
+    if (rateLimit.exceeded) {
+      console.error('Rate limit exceeded for visitor:', payload.visitor_id, 'workspace:', payload.workspace_id)
+      return new Response(JSON.stringify({ 
+        error: 'Rate limit exceeded - please try again later',
+        retry_after_seconds: Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)
+      }), {
+        status: 429,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          'Retry-After': String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000))
+        },
       })
     }
 
@@ -265,6 +437,7 @@ Deno.serve(async (req) => {
       chat_id: chat!.id,
       message_id: message.id,
       created_at: message.created_at,
+      rate_limit_remaining: rateLimit.remaining,
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
