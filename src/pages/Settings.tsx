@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,15 +9,28 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { MessageSquare, Globe, Copy, Check, ExternalLink } from 'lucide-react';
+import { MessageSquare, Globe, Copy, Check, ExternalLink, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 export default function Settings() {
   const [copied, setCopied] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const { workspace, currentWorkspaceId, refetchWorkspace } = useWorkspace();
+  const navigate = useNavigate();
   
   const [formData, setFormData] = useState({
     name: workspace?.name || '',
@@ -330,6 +344,74 @@ export default function Settings() {
                 <Button variant="link" size="sm" className="h-auto p-0">Terms of Service</Button>
                 <Button variant="link" size="sm" className="h-auto p-0">Privacy Policy</Button>
                 <Button variant="link" size="sm" className="h-auto p-0">Support</Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-destructive/50">
+            <CardHeader>
+              <CardTitle className="text-destructive">Danger Zone</CardTitle>
+              <CardDescription>
+                Irreversible actions that affect your account
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Delete Account</p>
+                  <p className="text-sm text-muted-foreground">
+                    Permanently delete your account and all associated data
+                  </p>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm">
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Account
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This action cannot be undone. This will permanently delete your
+                        account, all workspaces, chats, messages, and remove all your data
+                        from our servers.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        disabled={isDeleting}
+                        onClick={async () => {
+                          setIsDeleting(true);
+                          try {
+                            const { error } = await supabase.rpc('delete_user_account' as never);
+                            if (error) throw error;
+                            
+                            await supabase.auth.signOut();
+                            navigate('/auth');
+                            toast({
+                              title: 'Account deleted',
+                              description: 'Your account has been permanently deleted.',
+                            });
+                          } catch (error) {
+                            toast({
+                              title: 'Error',
+                              description: 'Failed to delete account. Please try again.',
+                              variant: 'destructive',
+                            });
+                          } finally {
+                            setIsDeleting(false);
+                          }
+                        }}
+                      >
+                        {isDeleting ? 'Deleting...' : 'Yes, delete my account'}
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               </div>
             </CardContent>
           </Card>
