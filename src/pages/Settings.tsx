@@ -388,7 +388,18 @@ export default function Settings() {
                           setIsDeleting(true);
                           try {
                             const { error } = await supabase.rpc('delete_user_account' as never);
-                            if (error) throw error;
+                            if (error) {
+                              // Check if it's the sole owner error
+                              if (error.message?.includes('sole owner')) {
+                                toast({
+                                  title: 'Cannot delete account',
+                                  description: 'You are the sole owner of one or more workspaces. Please transfer ownership or delete those workspaces first.',
+                                  variant: 'destructive',
+                                });
+                                return;
+                              }
+                              throw error;
+                            }
                             
                             await supabase.auth.signOut();
                             navigate('/auth');
