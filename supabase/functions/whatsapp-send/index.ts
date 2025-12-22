@@ -1,28 +1,48 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
-// For production, restrict CORS to your application domain
-// Development origins can be added conditionally
+// Exact allowed origins (production)
 const ALLOWED_ORIGINS = [
   'https://lovable.dev',
-  'https://id-preview--[a-zA-Z0-9-]+\\.lovable\\.app', // Preview domains pattern
+  'https://www.lovable.dev',
 ]
 
-// Check if origin is allowed (supports regex patterns)
+// Pre-compiled regex patterns for subdomain matching (safe patterns)
+const ALLOWED_ORIGIN_PATTERNS = [
+  /^https:\/\/[a-zA-Z0-9-]+\.lovable\.app$/, // *.lovable.app subdomains
+  /^https:\/\/[a-zA-Z0-9-]+\.lovable\.dev$/, // *.lovable.dev subdomains
+  /^https:\/\/id-preview--[a-zA-Z0-9-]+\.lovable\.app$/, // Preview domains
+]
+
+// Specific localhost ports allowed for development
+const ALLOWED_DEV_ORIGINS = [
+  'http://localhost:5173', // Vite default
+  'http://localhost:3000',
+  'http://localhost:8080',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+]
+
+// Check if origin is allowed using secure patterns
 function isOriginAllowed(origin: string | null): boolean {
   if (!origin) return false
   
-  // Allow localhost for development
-  if (origin.startsWith('http://localhost:')) return true
+  // Allow specific dev origins (limited ports)
+  if (ALLOWED_DEV_ORIGINS.includes(origin)) {
+    return true
+  }
   
-  // Check against allowed origins (some may be regex patterns)
-  return ALLOWED_ORIGINS.some(allowed => {
-    if (allowed.includes('[')) {
-      // It's a regex pattern
-      const regex = new RegExp(`^${allowed}$`)
-      return regex.test(origin)
-    }
-    return origin === allowed || origin.endsWith('.lovable.app') || origin.endsWith('.lovable.dev')
-  })
+  // Exact match check for production origins
+  if (ALLOWED_ORIGINS.includes(origin)) {
+    return true
+  }
+  
+  // Enforce HTTPS for pattern matching (prevents HTTP attacks)
+  if (!origin.startsWith('https://')) {
+    return false
+  }
+  
+  // Check pre-compiled safe regex patterns
+  return ALLOWED_ORIGIN_PATTERNS.some(pattern => pattern.test(origin))
 }
 
 function getCorsHeaders(req: Request): Record<string, string> {
