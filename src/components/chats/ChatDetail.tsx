@@ -290,11 +290,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MessageSquare, Globe, Bot, User, Send, Smile, Paperclip, ExternalLink, Check, AlertCircle } from 'lucide-react';
+import { MessageSquare, Globe, Bot, User, Send, Smile, Paperclip, ExternalLink, Check, AlertCircle, ArrowUp } from 'lucide-react';
 import type { Message } from '@/types';
 import { cn } from '@/lib/utils';
 import { mockQuickReplies } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { useUpdateChatStatus } from '@/hooks/useChatStatus';
 
 interface ChatDetailChatViewModel {
   id: string;
@@ -317,6 +318,7 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
   const [messageText, setMessageText] = useState('');
   const [isAdminMode, setIsAdminMode] = useState(chat.mode === 'admin');
   const { toast } = useToast();
+  const updateChatStatus = useUpdateChatStatus();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const previousMessagesLengthRef = useRef(messages.length);
@@ -361,12 +363,44 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
     });
   };
 
-  const handleResolve = () => {
-    setIsAdminMode(false);
-    toast({
-      title: 'Chat resolved',
-      description: 'Returning control to AI automated replies.'
-    });
+  const handleEscalateToHuman = async () => {
+    try {
+      await updateChatStatus.mutateAsync({
+        chatId: chat.id,
+        status: 'human',
+      });
+      setIsAdminMode(true);
+      toast({
+        title: 'Chat escalated',
+        description: 'Chat has been escalated to human and moved to Ongoing.'
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to escalate chat to human',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleResolve = async () => {
+    try {
+      await updateChatStatus.mutateAsync({
+        chatId: chat.id,
+        status: 'resolved',
+      });
+      setIsAdminMode(false);
+      toast({
+        title: 'Chat resolved',
+        description: 'Chat has been resolved and moved to Resolved.'
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to resolve chat',
+        variant: 'destructive'
+      });
+    }
   };
 
   const handleSend = () => {
@@ -378,6 +412,36 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
     });
     setMessageText('');
   };
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    // Only auto-scroll if:
+    // 1. Messages array length increased (new message arrived)
+    // 2. User is already near the bottom (within 100px)
+    const messagesContainer = messagesContainerRef.current;
+    if (!messagesContainer) return;
+
+    const isNearBottom = 
+      messagesContainer.scrollHeight - messagesContainer.scrollTop - messagesContainer.clientHeight < 100;
+
+    const hasNewMessage = messages.length > previousMessagesLengthRef.current;
+
+    if (hasNewMessage && isNearBottom) {
+      // Small delay to ensure DOM has updated
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+
+    previousMessagesLengthRef.current = messages.length;
+  }, [messages.length, messages]);
+
+  // Scroll to bottom on initial load or when chat changes
+  useEffect(() => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }, 100);
+  }, [chat.id]);
 
   return (
     <Card className="h-full flex flex-col">
@@ -409,25 +473,38 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
               {isAdminMode ? <User className="w-3 h-3" /> : <Bot className="w-3 h-3" />}
               {isAdminMode ? 'Admin Control' : 'AI Automated'}
             </Badge>
-            <Badge variant={chat.status === 'needs_action' ? 'destructive' : 'outline'}>
-              {chat.status.replace('_', ' ')}
+            <Badge variant={chat.status === 'needs_action' ? 'destructive' : chat.status === 'resolved' ? 'outline' : 'secondary'}>
+              {chat.status === 'needs_action' ? 'Needs Action' : 
+               chat.status === 'human' ? 'Ongoing' : 
+               chat.status === 'resolved' ? 'Resolved' : 
+               'AI'}
             </Badge>
           </div>
         </div>
 
         {/* Actions */}
         <div className="flex items-center gap-2">
-          {!isAdminMode && chat.status !== 'resolved' && (
-            <Button onClick={handleTakeOver} size="sm" variant="outline">
-              <User className="w-4 h-4 mr-2" />
-              Take Over as Admin
+          {/* Escalate to Human button - show for AI and Needs Action chats */}
+          {(chat.status === 'ai' || chat.status === 'needs_action') && (
+            <Button onClick={handleEscalateToHuman} size="sm" variant="outline">
+              <ArrowUp className="w-4 h-4 mr-2" />
+              Escalate to Human
             </Button>
           )}
           
-          {chat.status === 'needs_action' && (
+          {/* Resolve button - show for Ongoing (human) chats */}
+          {chat.status === 'human' && (
             <Button onClick={handleResolve} size="sm">
               <Check className="w-4 h-4 mr-2" />
-              Resolve (Return to AI)
+              Resolve
+            </Button>
+          )}
+          
+          {/* Take Over button - show when not in admin mode and not resolved */}
+          {!isAdminMode && chat.status !== 'resolved' && chat.status !== 'human' && (
+            <Button onClick={handleTakeOver} size="sm" variant="outline">
+              <User className="w-4 h-4 mr-2" />
+              Take Over as Admin
             </Button>
           )}
           
@@ -451,10 +528,7 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
       </div>
 
       {/* Messages */}
-      <div 
-        ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4"
-      >
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.map((message) => {
           const isInbound = message.direction === 'inbound';
           const isAI = message.sender_type === 'ai';

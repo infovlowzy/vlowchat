@@ -11,19 +11,46 @@ import { ChatDetail } from '@/components/chats/ChatDetail';
 import { useChats } from '@/hooks/useChats';
 import { useMessages } from '@/hooks/useMessages';
 
-type TabValue = 'ai' | 'needs_action' | 'human' | 'resolved';
+type MainTabValue = 'all' | 'ai' | 'ongoing' | 'resolved';
+type AISubTab = 'all_ai' | 'needs_action';
+type OngoingSubTab = 'all' | 'unread';
 
 export default function Chats() {
   const { data: chats = [], isLoading } = useChats();
-  const [selectedTab, setSelectedTab] = useState<TabValue>('ai');
+  const [selectedTab, setSelectedTab] = useState<MainTabValue>('all');
+  const [aiSubTab, setAISubTab] = useState<AISubTab>('all_ai');
+  const [ongoingSubTab, setOngoingSubTab] = useState<OngoingSubTab>('all');
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [channelFilter, setChannelFilter] = useState<Channel | 'all'>('all');
   const { data: messages = [] } = useMessages(selectedChatId);
 
   const filteredChats = chats.filter(chat => {
-    // Tab filter - now filtering by current_status directly
-    if (chat.current_status !== selectedTab) return false;
+    // Main tab filter
+    if (selectedTab === 'all') {
+      // Show all chats
+    } else if (selectedTab === 'ai') {
+      // Filter based on sub-tab
+      if (aiSubTab === 'all_ai') {
+        // Show all AI chats (status = 'ai')
+        if (chat.current_status !== 'ai') return false;
+      } else if (aiSubTab === 'needs_action') {
+        // Show only needs_action chats
+        if (chat.current_status !== 'needs_action') return false;
+      }
+    } else if (selectedTab === 'ongoing') {
+      // Show ongoing chats (status = 'human')
+      if (chat.current_status !== 'human') return false;
+      
+      // Filter based on sub-tab
+      if (ongoingSubTab === 'unread') {
+        // Show only unread ongoing chats
+        if (chat.unreadCount === 0) return false;
+      }
+    } else if (selectedTab === 'resolved') {
+      // Show resolved chats
+      if (chat.current_status !== 'resolved') return false;
+    }
     
     // Channel filter
     if (channelFilter !== 'all' && chat.channel !== channelFilter) return false;
@@ -40,7 +67,12 @@ export default function Chats() {
   const selectedChat = chats.find(c => c.id === selectedChatId);
 
   // Count chats per status
-  const countByStatus = (status: TabValue) => chats.filter(c => c.current_status === status).length;
+  const countAllChats = chats.length;
+  const countNeedsAction = chats.filter(c => c.current_status === 'needs_action').length;
+  const countOngoing = chats.filter(c => c.current_status === 'human').length;
+  const countOngoingUnread = chats.filter(c => c.current_status === 'human' && c.unreadCount > 0).length;
+  const countResolved = chats.filter(c => c.current_status === 'resolved').length;
+  const countAllAI = chats.filter(c => c.current_status === 'ai').length;
 
   if (isLoading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
@@ -107,38 +139,91 @@ export default function Chats() {
 
       {/* Middle Column: Chat List */}
       <div className="w-96 flex flex-col bg-card rounded-lg border">
-        <div className="p-4 border-b">
-          <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as TabValue)}>
+        <div className="p-4 border-b space-y-3">
+          <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as MainTabValue)}>
             <TabsList className="w-full grid grid-cols-4">
+              <TabsTrigger value="all" className="text-xs px-2">
+                All Chats
+                {countAllChats > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                    {countAllChats}
+                  </Badge>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="ai" className="text-xs px-2">
                 AI
-                {countByStatus('ai') > 0 && (
+                {(countAllAI + countNeedsAction) > 0 && (
                   <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                    {countByStatus('ai')}
+                    {countAllAI + countNeedsAction}
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="needs_action" className="text-xs px-2">
-                Action
-                {countByStatus('needs_action') > 0 && (
-                  <Badge variant="destructive" className="ml-1 h-5 px-1.5 text-xs">
-                    {countByStatus('needs_action')}
-                  </Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="human" className="text-xs px-2">
+              <TabsTrigger value="ongoing" className="text-xs px-2">
                 Ongoing
-                {countByStatus('human') > 0 && (
+                {countOngoing > 0 && (
                   <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                    {countByStatus('human')}
+                    {countOngoing}
                   </Badge>
                 )}
               </TabsTrigger>
               <TabsTrigger value="resolved" className="text-xs px-2">
                 Resolved
+                {countResolved > 0 && (
+                  <Badge variant="outline" className="ml-1 h-5 px-1.5 text-xs">
+                    {countResolved}
+                  </Badge>
+                )}
               </TabsTrigger>
             </TabsList>
           </Tabs>
+
+          {/* Sub-filters for AI */}
+          {selectedTab === 'ai' && (
+            <Tabs value={aiSubTab} onValueChange={(v) => setAISubTab(v as AISubTab)}>
+              <TabsList className="w-full grid grid-cols-2">
+                <TabsTrigger value="all_ai" className="text-xs px-2">
+                  All
+                  {countAllAI > 0 && (
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                      {countAllAI}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="needs_action" className="text-xs px-2">
+                  Needs Action
+                  {countNeedsAction > 0 && (
+                    <Badge variant="destructive" className="ml-1 h-5 px-1.5 text-xs">
+                      {countNeedsAction}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
+
+          {/* Sub-filters for Ongoing */}
+          {selectedTab === 'ongoing' && (
+            <Tabs value={ongoingSubTab} onValueChange={(v) => setOngoingSubTab(v as OngoingSubTab)}>
+              <TabsList className="w-full grid grid-cols-2">
+                <TabsTrigger value="all" className="text-xs px-2">
+                  All
+                  {countOngoing > 0 && (
+                    <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                      {countOngoing}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="unread" className="text-xs px-2">
+                  Unread
+                  {countOngoingUnread > 0 && (
+                    <Badge variant="default" className="ml-1 h-5 px-1.5 text-xs">
+                      {countOngoingUnread}
+                    </Badge>
+                  )}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto">
