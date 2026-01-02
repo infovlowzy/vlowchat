@@ -418,15 +418,11 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
       const jwt = sess.session?.access_token
       if (!jwt) throw new Error("Not signed in")
   
-      // const { data, error } = await supabase.functions.invoke("whatsapp-send", {
-      //   headers: { Authorization: `Bearer ${jwt}` },
-      //   body: { chat_id: chat.id, message: text },
-      // })
-
       const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+        headers: { Authorization: `Bearer ${jwt}` },
         body: { chat_id: chat.id, message: text },
       })
-  
+      
       if (error) {
         if (error instanceof FunctionsHttpError) {
           const details = await error.context.json()
