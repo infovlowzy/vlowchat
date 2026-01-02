@@ -426,9 +426,22 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
   
       if (error) {
         if (error instanceof FunctionsHttpError) {
-          const payload = await error.context.json().catch(() => null)
-          throw new Error(payload?.error ?? "Function failed")
+          let message = "Unknown function error"
+      
+          try {
+            const payload = await error.context.json()
+            message =
+              payload?.error ||
+              payload?.message ||
+              payload?.details ||
+              JSON.stringify(payload)
+          } catch {
+            message = error.message
+          }
+      
+          throw new Error(message)
         }
+      
         throw error
       }
   
