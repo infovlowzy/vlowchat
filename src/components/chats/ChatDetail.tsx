@@ -296,6 +296,7 @@ import { cn } from '@/lib/utils';
 import { mockQuickReplies } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
 import { useUpdateChatStatus } from '@/hooks/useChatStatus';
+import { supabase } from "@/integrations/supabase/client";
 
 interface ChatDetailChatViewModel {
   id: string;
@@ -403,15 +404,32 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
     }
   };
 
-  const handleSend = () => {
-    if (!messageText.trim()) return;
-    
-    toast({
-      title: 'Message sent',
-      description: 'Your message has been delivered.'
-    });
-    setMessageText('');
-  };
+  const handleSend = async () => {
+    const text = messageText.trim()
+    if (!text) return
+  
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const jwt = sess.session?.access_token
+      if (!jwt) throw new Error("Not signed in")
+  
+      const { data, error } = await supabase.functions.invoke("webhook-send", {
+        headers: { Authorization: `Bearer ${jwt}` },
+        body: { chat_id: chat.id, message: text },
+      })
+  
+      if (error) throw error
+  
+      toast({ title: "Message sent", description: "Delivered." })
+      setMessageText("")
+    } catch (e: any) {
+      toast({
+        title: "Send failed",
+        description: e.message ?? "Unknown error",
+        variant: "destructive",
+      })
+    }
+  }
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
