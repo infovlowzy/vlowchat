@@ -414,19 +414,9 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
     if (!text) return
   
     try {
-      // ✅ getSession already returns a valid, refreshed session
-      const { data, error: sessionErr } = await supabase.auth.getSession()
-      if (sessionErr) throw sessionErr
-  
-      const jwt = data.session?.access_token
-      if (!jwt) throw new Error("Not signed in")
-  
-      const { data: res, error } = await supabase.functions.invoke(
+      const { data, error } = await supabase.functions.invoke(
         "whatsapp-send",
         {
-          headers: {
-            Authorization: `Bearer ${jwt}`,
-          },
           body: {
             chat_id: chat.id,
             message: text,
