@@ -414,35 +414,51 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
     if (!text) return
   
     try {
-      const { data: sess } = await supabase.auth.getSession()
-      console.log("session:", sess.session)
-      console.log("access_token parts:", sess.session?.access_token?.split(".").length)
-      
-      const jwt = sess.session?.access_token
-      if (!jwt) throw new Error("Not signed in")
-
-      await supabase.auth.refreshSession()
-
-      const { data, error } = await supabase.functions.invoke("whatsapp-send", {
-        headers: { Authorization: `Bearer ${jwt}` },
-        body: { chat_id: chat.id, message: text },
-      })
-      
-      if (error) {
-        if (error instanceof FunctionsHttpError) {
-          const details = await error.context.json()
-          console.error("Function HTTP error:", details)
-          throw new Error(details?.error ?? JSON.stringify(details))
-        } else if (error instanceof FunctionsRelayError) {
-          throw new Error(`Relay error: ${error.message}`)
-        } else if (error instanceof FunctionsFetchError) {
-          throw new Error(`Fetch error: ${error.message}`)
-        } else {
-          throw error
-        }
+      // 1) Ensure session is fresh
+      const { data: refreshed, error: refreshErr } =
+        await supabase.auth.refreshSession()
+  
+      if (refreshErr) {
+        throw new Error("Session expired. Please re-login.")
       }
   
-      toast({ title: "Message sent", description: "Delivered." })
+      const jwt = refreshed.session?.access_token
+      if (!jwt) {
+        throw new Error("Not signed in")
+      }
+  
+      // 2) Invoke Edge Function with fresh JWT
+      const { data, error } = await supabase.functions.invoke(
+        "whatsapp-send",
+        {
+          headers: {
+            Authorization: `Bearer ${jwt}`,
+          },
+          body: {
+            chat_id: chat.id,
+            message: text,
+          },
+        }
+      )
+  
+      if (error) {
+        if (error instanceof FunctionsHttpError) {
+          let details: any = null
+          try {
+            details = await error.context.json()
+          } catch {}
+  
+          throw new Error(details?.error ?? "Function error")
+        }
+  
+        throw new Error(error.message)
+      }
+  
+      toast({
+        title: "Message sent",
+        description: "Delivered.",
+      })
+  
       setMessageText("")
     } catch (e: any) {
       toast({
@@ -452,7 +468,7 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
       })
     }
   }
-
+  
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     // Only auto-scroll if:
