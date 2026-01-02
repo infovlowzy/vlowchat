@@ -414,21 +414,14 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
     if (!text) return
   
     try {
-      // 1) Ensure session is fresh
-      const { data: refreshed, error: refreshErr } =
-        await supabase.auth.refreshSession()
+      // ✅ getSession already returns a valid, refreshed session
+      const { data, error: sessionErr } = await supabase.auth.getSession()
+      if (sessionErr) throw sessionErr
   
-      if (refreshErr) {
-        throw new Error("Session expired. Please re-login.")
-      }
+      const jwt = data.session?.access_token
+      if (!jwt) throw new Error("Not signed in")
   
-      const jwt = refreshed.session?.access_token
-      if (!jwt) {
-        throw new Error("Not signed in")
-      }
-  
-      // 2) Invoke Edge Function with fresh JWT
-      const { data, error } = await supabase.functions.invoke(
+      const { data: res, error } = await supabase.functions.invoke(
         "whatsapp-send",
         {
           headers: {
@@ -443,30 +436,13 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
   
       if (error) {
         if (error instanceof FunctionsHttpError) {
-          let payload: any = null
-      
-          try {
-            payload = await error.context.json()
-          } catch {
-            throw new Error("Edge function failed")
-          }
-      
-          // Show the most useful message
-          throw new Error(
-            payload?.error ||
-            payload?.message ||
-            JSON.stringify(payload)
-          )
+          const payload = await error.context.json().catch(() => null)
+          throw new Error(payload?.error ?? "Function failed")
         }
-      
-        throw new Error(error.message)
+        throw error
       }
-      
-      toast({
-        title: "Message sent",
-        description: "Delivered.",
-      })
   
+      toast({ title: "Message sent" })
       setMessageText("")
     } catch (e: any) {
       toast({
