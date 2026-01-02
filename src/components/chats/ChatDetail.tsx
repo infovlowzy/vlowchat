@@ -443,17 +443,25 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
   
       if (error) {
         if (error instanceof FunctionsHttpError) {
-          let details: any = null
+          let payload: any = null
+      
           try {
-            details = await error.context.json()
-          } catch {}
-  
-          throw new Error(details?.error ?? "Function error")
+            payload = await error.context.json()
+          } catch {
+            throw new Error("Edge function failed")
+          }
+      
+          // Show the most useful message
+          throw new Error(
+            payload?.error ||
+            payload?.message ||
+            JSON.stringify(payload)
+          )
         }
-  
+      
         throw new Error(error.message)
       }
-  
+      
       toast({
         title: "Message sent",
         description: "Delivered.",
