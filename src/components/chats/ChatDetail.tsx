@@ -419,6 +419,10 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
       console.log("access_token parts:", sess.session?.access_token?.split(".").length)
       
       const jwt = sess.session?.access_token
+      if (jwt) {
+        const payload = JSON.parse(atob(jwt.split(".")[1]))
+        console.log("iss:", payload.iss)
+      }
       if (!jwt) throw new Error("Not signed in")
 
   
