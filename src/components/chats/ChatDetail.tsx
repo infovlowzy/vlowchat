@@ -297,6 +297,11 @@ import { mockQuickReplies } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
 import { useUpdateChatStatus } from '@/hooks/useChatStatus';
 import { supabase } from "@/integrations/supabase/client";
+import {
+  FunctionsHttpError,
+  FunctionsRelayError,
+  FunctionsFetchError,
+} from "@supabase/supabase-js"
 
 interface ChatDetailChatViewModel {
   id: string;
@@ -403,7 +408,7 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
       });
     }
   };
-
+  
   const handleSend = async () => {
     const text = messageText.trim()
     if (!text) return
@@ -418,14 +423,26 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
         body: { chat_id: chat.id, message: text },
       })
   
-      if (error) throw error
+      if (error) {
+        if (error instanceof FunctionsHttpError) {
+          const details = await error.context.json()
+          console.error("Function HTTP error:", details)
+          throw new Error(details?.error ?? JSON.stringify(details))
+        } else if (error instanceof FunctionsRelayError) {
+          throw new Error(`Relay error: ${error.message}`)
+        } else if (error instanceof FunctionsFetchError) {
+          throw new Error(`Fetch error: ${error.message}`)
+        } else {
+          throw error
+        }
+      }
   
       toast({ title: "Message sent", description: "Delivered." })
       setMessageText("")
     } catch (e: any) {
       toast({
         title: "Send failed",
-        description: e.message ?? "Unknown error",
+        description: e?.message ?? "Unknown error",
         variant: "destructive",
       })
     }
