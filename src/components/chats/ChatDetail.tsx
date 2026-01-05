@@ -414,22 +414,45 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
     if (!text) return
   
     try {
-      // Ensure you have a valid session/token right now
-      const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession()
-      if (refreshErr) throw refreshErr
-      if (!refreshed.session?.access_token) throw new Error("Not signed in")
+      const { data, error } = await supabase.functions.invoke(
+        "whatsapp-send",
+        {
+          body: {
+            chat_id: chat.id,
+            message: text,
+          },
+        }
+      )
   
-      const { data, error } = await supabase.functions.invoke("whatsapp-send", {
-        // Option A: let supabase attach auth automatically
-        body: { chat_id: chat.id, message: text },
-      })
-  
-      if (error) throw error
+      if (error) {
+        if (error instanceof FunctionsHttpError) {
+          let message = "Unknown function error"
+      
+          try {
+            const payload = await error.context.json()
+            message =
+              payload?.error ||
+              payload?.message ||
+              payload?.details ||
+              JSON.stringify(payload)
+          } catch {
+            message = error.message
+          }
+      
+          throw new Error(message)
+        }
+      
+        throw error
+      }
   
       toast({ title: "Message sent" })
       setMessageText("")
     } catch (e: any) {
-      toast({ title: "Send failed", description: e?.message ?? "Unknown error", variant: "destructive" })
+      toast({
+        title: "Send failed",
+        description: e?.message ?? "Unknown error",
+        variant: "destructive",
+      })
     }
   }
   
