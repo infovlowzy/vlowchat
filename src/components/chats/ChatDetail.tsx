@@ -426,12 +426,16 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
         return
       }
 
+      // Explicitly pass the authorization header
       const { data, error } = await supabase.functions.invoke(
         "whatsapp-send",
         {
           body: {
             chat_id: chat.id,
             message: text,
+          },
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
           },
         }
       )

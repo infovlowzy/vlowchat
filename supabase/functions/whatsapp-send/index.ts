@@ -83,26 +83,21 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Ensure the authorization header is properly formatted
-    // Supabase client sends it as "Bearer <token>"
-    const authToken = authHeader.startsWith("Bearer ")
-      ? authHeader
-      : `Bearer ${authHeader}`
-
-    // Create Supabase client with user's JWT token
+    // Create Supabase client with anon key and pass the authorization header directly
+    // Supabase client's functions.invoke() sends "Bearer <token>" format
     const supabaseUser = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authToken } },
+      global: { headers: { Authorization: authHeader } },
     })
 
     // Verify the JWT token and get the user
-    const { data: authData, error: authErr } =
-      await supabaseUser.auth.getUser()
+    const { data: authData, error: authErr } = await supabaseUser.auth.getUser()
 
     if (authErr || !authData?.user) {
       console.error("Auth verification failed:", {
         error: authErr?.message,
         hasUser: !!authData?.user,
         authHeaderPresent: !!authHeader,
+        authHeaderPrefix: authHeader?.substring(0, 20),
       })
       return json(
         {
