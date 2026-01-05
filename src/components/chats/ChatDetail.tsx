@@ -430,6 +430,29 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
           description: "Please log in again",
           variant: "destructive",
         })
+        const token = refreshed.session.access_token
+
+        // Safer logging (don’t expose full token)
+        console.log("[ChatDetail] access_token preview:", {
+          prefix: token.slice(0, 20),
+          suffix: token.slice(-20),
+          length: token.length,
+          parts: token.split(".").length, // should be 3 for JWT
+        })
+
+        // Decode JWT payload to read `iss`
+        const payloadBase64Url = token.split(".")[1]
+        const payloadJson = JSON.parse(
+          atob(payloadBase64Url.replace(/-/g, "+").replace(/_/g, "/"))
+        )
+
+        console.log("[ChatDetail] JWT claims:", {
+          iss: payloadJson.iss,
+          sub: payloadJson.sub,
+          exp: payloadJson.exp,
+          role: payloadJson.role,
+        })
+
         return
       }
   
