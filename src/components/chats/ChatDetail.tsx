@@ -460,24 +460,18 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
   
       if (error) {
         if (error instanceof FunctionsHttpError) {
-          let message = "Unknown function error"
-      
-          try {
-            const payload = await error.context.json()
-            message =
-              payload?.error ||
-              payload?.message ||
-              payload?.details ||
-              JSON.stringify(payload)
-          } catch {
-            message = error.message
-          }
-      
-          throw new Error(message)
+          const status = error.context.status
+          const text = await error.context.text()
+          console.error("Function HTTP error:", status, text)
+          throw new Error(`${status}: ${text}`)
+        } else if (error instanceof FunctionsRelayError) {
+          throw new Error(`Relay error: ${error.message}`)
+        } else if (error instanceof FunctionsFetchError) {
+          throw new Error(`Fetch error: ${error.message}`)
+        } else {
+          throw error
         }
-      
-        throw error
-      }
+      }      
   
       toast({ title: "Message sent" })
       setMessageText("")
