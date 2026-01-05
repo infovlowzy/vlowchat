@@ -1,4 +1,4 @@
-# Welcome to your Vlowchat AI
+# Welcome to Vlowchat AI
 
 ## Project info
 
