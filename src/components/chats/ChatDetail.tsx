@@ -414,20 +414,17 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
     if (!text) return
   
     try {
-      // Ensure we have a valid session before calling the function
-      console.log("[ChatDetail] Getting session...")
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
-      console.log("[ChatDetail] Session check:", {
-        hasSession: !!session,
-        hasError: !!sessionError,
-        error: sessionError?.message,
-        hasAccessToken: !!session?.access_token,
-        tokenLength: session?.access_token?.length,
+      console.log("[ChatDetail] Refreshing session...")
+      const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession()
+  
+      console.log("[ChatDetail] Refresh result:", {
+        hasSession: !!refreshed.session,
+        hasAccessToken: !!refreshed.session?.access_token,
+        tokenLength: refreshed.session?.access_token?.length,
+        refreshErr: refreshErr?.message,
       })
-      
-      if (sessionError || !session) {
-        console.error("[ChatDetail] No valid session:", sessionError)
+  
+      if (refreshErr || !refreshed.session) {
         toast({
           title: "Authentication required",
           description: "Please log in again",
@@ -435,43 +432,23 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
         })
         return
       }
-
-      console.log("[ChatDetail] Calling whatsapp-send function with:", {
-        chat_id: chat.id,
-        messageLength: text.length,
-        hasAuthHeader: true,
+  
+      console.log("[ChatDetail] Calling whatsapp-send (no manual headers)...")
+      const { data, error } = await supabase.functions.invoke("whatsapp-send", {
+        body: { chat_id: chat.id, message: text },
       })
-
-      // Explicitly pass the authorization header
-      const { data, error } = await supabase.functions.invoke(
-        "whatsapp-send",
-        {
-          body: {
-            chat_id: chat.id,
-            message: text,
-          },
-          headers: {
-            Authorization: `Bearer ${session.access_token}`,
-          },
-        }
-      )
-
+  
       console.log("[ChatDetail] Function response:", { data, error })
   
       if (error) {
         if (error instanceof FunctionsHttpError) {
           const status = error.context.status
-          const text = await error.context.text()
-          console.error("Function HTTP error:", status, text)
-          throw new Error(`${status}: ${text}`)
-        } else if (error instanceof FunctionsRelayError) {
-          throw new Error(`Relay error: ${error.message}`)
-        } else if (error instanceof FunctionsFetchError) {
-          throw new Error(`Fetch error: ${error.message}`)
-        } else {
-          throw error
+          const bodyText = await error.context.text()
+          console.error("Function HTTP error:", status, bodyText)
+          throw new Error(`${status}: ${bodyText}`)
         }
-      }      
+        throw error
+      }
   
       toast({ title: "Message sent" })
       setMessageText("")
@@ -483,6 +460,7 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
       })
     }
   }
+  
   
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
