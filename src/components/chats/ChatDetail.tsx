@@ -414,6 +414,18 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
     if (!text) return
   
     try {
+      // Ensure we have a valid session before calling the function
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      
+      if (sessionError || !session) {
+        toast({
+          title: "Authentication required",
+          description: "Please log in again",
+          variant: "destructive",
+        })
+        return
+      }
+
       const { data, error } = await supabase.functions.invoke(
         "whatsapp-send",
         {
