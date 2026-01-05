@@ -435,26 +435,34 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
 
       const token = refreshed.session.access_token
 
-        // Safer logging (don’t expose full token)
-        console.log("[ChatDetail] access_token preview:", {
-          prefix: token.slice(0, 20),
-          suffix: token.slice(-20),
-          length: token.length,
-          parts: token.split(".").length, // should be 3 for JWT
-        })
+      // Safer logging (don’t expose full token)
+      console.log("[ChatDetail] access_token preview:", {
+        prefix: token.slice(0, 20),
+        suffix: token.slice(-20),
+        length: token.length,
+        parts: token.split(".").length, // should be 3 for JWT
+      })
 
-        // Decode JWT payload to read `iss`
-        const payloadBase64Url = token.split(".")[1]
-        const payloadJson = JSON.parse(
-          atob(payloadBase64Url.replace(/-/g, "+").replace(/_/g, "/"))
-        )
+      // Decode JWT payload to read `iss`
+      const payloadBase64Url = token.split(".")[1]
+      const payloadJson = JSON.parse(
+        atob(payloadBase64Url.replace(/-/g, "+").replace(/_/g, "/"))
+      )
 
-        console.log("[ChatDetail] JWT claims:", {
-          iss: payloadJson.iss,
-          sub: payloadJson.sub,
-          exp: payloadJson.exp,
-          role: payloadJson.role,
-        })
+      console.log("[ChatDetail] JWT claims:", {
+        iss: payloadJson.iss,
+        sub: payloadJson.sub,
+        exp: payloadJson.exp,
+        role: payloadJson.role,
+      })
+      
+      const headerB64 = token.split(".")[0]
+      const header = JSON.parse(
+        atob(headerB64.replace(/-/g, "+").replace(/_/g, "/"))
+      )
+
+      console.log("[ChatDetail] JWT header:", header)
+      // Expect: { alg: "ES256", kid: "...", typ: "JWT", ... }
   
       console.log("[ChatDetail] Calling whatsapp-send (no manual headers)...")
       const { data, error } = await supabase.functions.invoke("whatsapp-send", {
