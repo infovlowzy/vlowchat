@@ -430,7 +430,10 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
           description: "Please log in again",
           variant: "destructive",
         })
-        const token = refreshed.session.access_token
+        return
+      }
+
+      const token = refreshed.session.access_token
 
         // Safer logging (don’t expose full token)
         console.log("[ChatDetail] access_token preview:", {
@@ -452,9 +455,6 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
           exp: payloadJson.exp,
           role: payloadJson.role,
         })
-
-        return
-      }
   
       console.log("[ChatDetail] Calling whatsapp-send (no manual headers)...")
       const { data, error } = await supabase.functions.invoke("whatsapp-send", {
