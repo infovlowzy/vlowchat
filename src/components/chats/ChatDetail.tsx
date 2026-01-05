@@ -415,9 +415,19 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
   
     try {
       // Ensure we have a valid session before calling the function
+      console.log("[ChatDetail] Getting session...")
       const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       
+      console.log("[ChatDetail] Session check:", {
+        hasSession: !!session,
+        hasError: !!sessionError,
+        error: sessionError?.message,
+        hasAccessToken: !!session?.access_token,
+        tokenLength: session?.access_token?.length,
+      })
+      
       if (sessionError || !session) {
+        console.error("[ChatDetail] No valid session:", sessionError)
         toast({
           title: "Authentication required",
           description: "Please log in again",
@@ -425,6 +435,12 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
         })
         return
       }
+
+      console.log("[ChatDetail] Calling whatsapp-send function with:", {
+        chat_id: chat.id,
+        messageLength: text.length,
+        hasAuthHeader: true,
+      })
 
       // Explicitly pass the authorization header
       const { data, error } = await supabase.functions.invoke(
@@ -439,6 +455,8 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
           },
         }
       )
+
+      console.log("[ChatDetail] Function response:", { data, error })
   
       if (error) {
         if (error instanceof FunctionsHttpError) {

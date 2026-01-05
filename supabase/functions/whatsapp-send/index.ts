@@ -71,11 +71,26 @@ Deno.serve(async (req) => {
     /* ------------------------------------------------------------------ */
     /* AUTH                                                                */
     /* ------------------------------------------------------------------ */
+    // Log all headers for debugging
+    console.log("[whatsapp-send] Request headers:", {
+      authorization: req.headers.get("authorization") ? "present" : "missing",
+      Authorization: req.headers.get("Authorization") ? "present" : "missing",
+      allHeaders: Object.fromEntries(req.headers.entries()),
+    })
+
     // Check for authorization header (Supabase sends it automatically)
     const authHeader = req.headers.get("authorization") || req.headers.get("Authorization")
 
+    console.log("[whatsapp-send] Auth header check:", {
+      present: !!authHeader,
+      length: authHeader?.length,
+      prefix: authHeader?.substring(0, 30),
+      startsWithBearer: authHeader?.startsWith("Bearer "),
+    })
+
     if (!authHeader) {
-      console.error("Missing authorization header")
+      console.error("[whatsapp-send] Missing authorization header")
+      console.error("[whatsapp-send] All available headers:", Object.keys(Object.fromEntries(req.headers.entries())))
       return json(
         { error: "Unauthorized", details: "Missing authorization header" },
         401,
@@ -85,19 +100,33 @@ Deno.serve(async (req) => {
 
     // Create Supabase client with anon key and pass the authorization header directly
     // Supabase client's functions.invoke() sends "Bearer <token>" format
+    console.log("[whatsapp-send] Creating Supabase client with anon key")
     const supabaseUser = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     })
 
     // Verify the JWT token and get the user
+    console.log("[whatsapp-send] Verifying JWT token...")
     const { data: authData, error: authErr } = await supabaseUser.auth.getUser()
 
+    console.log("[whatsapp-send] Auth verification result:", {
+      hasError: !!authErr,
+      errorMessage: authErr?.message,
+      errorStatus: authErr?.status,
+      hasUser: !!authData?.user,
+      userId: authData?.user?.id,
+    })
+
     if (authErr || !authData?.user) {
-      console.error("Auth verification failed:", {
+      console.error("[whatsapp-send] Auth verification failed:", {
         error: authErr?.message,
+        errorStatus: authErr?.status,
+        errorName: authErr?.name,
         hasUser: !!authData?.user,
         authHeaderPresent: !!authHeader,
-        authHeaderPrefix: authHeader?.substring(0, 20),
+        authHeaderPrefix: authHeader?.substring(0, 30),
+        supabaseUrl,
+        hasAnonKey: !!anonKey,
       })
       return json(
         {
@@ -110,7 +139,7 @@ Deno.serve(async (req) => {
     }
 
     const user = authData.user
-    console.log("Authenticated user:", user.id)
+    console.log("[whatsapp-send] ✅ Authenticated user:", user.id)
 
     /* ------------------------------------------------------------------ */
     /* BODY VALIDATION                                                     */
