@@ -328,6 +328,8 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const previousMessagesLengthRef = useRef(messages.length);
+  const dayKey = (d: Date) =>
+    d.toLocaleDateString("en-GB", { year: "numeric", month: "short", day: "2-digit" })
   
   const ChannelIcon = chat.channel === 'whatsapp' ? MessageSquare : Globe;
 
@@ -609,7 +611,7 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
 
       {/* Messages */}
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => {
+        {messages.map((message, idx) => {
           const isInbound = message.direction === 'inbound';
           const isAI = message.sender_type === 'ai';
           const isHuman = message.sender_type === 'human';
@@ -617,68 +619,83 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
           const createdAt = message.created_at
             ? new Date(message.created_at)
             : null;
+
+          const prev = messages[idx - 1]
+          const prevDate = prev?.created_at ? new Date(prev.created_at) : null
           
+          const showDayDivider =
+            !!createdAt && (!prevDate || dayKey(createdAt) !== dayKey(prevDate))
+
           return (
             <div
-              key={message.id}
-              className={cn(
-                'flex gap-3',
-                isInbound ? 'justify-start' : 'justify-end'
-              )}
-            >
-              {isInbound && (
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-medium">
-                    {chat.customerName.charAt(0)}
+              key={message.id}> 
+              {showDayDivider && createdAt && (
+                <div className="flex justify-center my-2">
+                  <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">
+                    {dayKey(createdAt)}
                   </span>
                 </div>
               )}
-              
-              <div className={cn('flex flex-col gap-1', isInbound ? 'items-start' : 'items-end')}>
-                {!isInbound && (
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    {isAI ? <Bot className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                    <span>{isAI ? 'AI Bot' : 'Admin'}</span>
+              <div
+                className={cn(
+                  'flex gap-3',
+                  isInbound ? 'justify-start' : 'justify-end'
+                )}
+              >
+                {isInbound && (
+                  <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0">
+                    <span className="text-xs font-medium">
+                      {chat.customerName.charAt(0)}
+                    </span>
                   </div>
                 )}
                 
-                <div
-                  className={cn(
-                    'rounded-lg px-4 py-2 max-w-md',
-                    isInbound
-                      ? 'bg-muted'
-                      : isAI
-                      ? 'bg-primary/10 text-foreground'
-                      : 'bg-primary text-primary-foreground'
+                <div className={cn('flex flex-col gap-1', isInbound ? 'items-start' : 'items-end')}>
+                  {!isInbound && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      {isAI ? <Bot className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                      <span>{isAI ? 'AI Bot' : 'Admin'}</span>
+                    </div>
                   )}
-                >
-                  <p className="text-sm whitespace-pre-wrap">
-                    {message.text ?? ''}
-                  </p>
+                  
+                  <div
+                    className={cn(
+                      'rounded-lg px-4 py-2 max-w-md',
+                      isInbound
+                        ? 'bg-muted'
+                        : isAI
+                        ? 'bg-primary/10 text-foreground'
+                        : 'bg-primary text-primary-foreground'
+                    )}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">
+                      {message.text ?? ''}
+                    </p>
+                  </div>
+                  
+                  {createdAt && (
+                    <span className="text-xs text-muted-foreground">
+                      {createdAt.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  )}
                 </div>
                 
-                {createdAt && (
-                  <span className="text-xs text-muted-foreground">
-                    {createdAt.toLocaleTimeString('en-US', {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </span>
+                {!isInbound && (
+                  <div className={cn(
+                    'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
+                    isAI ? 'bg-primary/10' : 'bg-accent/10'
+                  )}>
+                    {isAI ? (
+                      <Bot className="w-4 h-4 text-primary" />
+                    ) : (
+                      <User className="w-4 h-4 text-accent" />
+                    )}
+                  </div>
                 )}
               </div>
-              
-              {!isInbound && (
-                <div className={cn(
-                  'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
-                  isAI ? 'bg-primary/10' : 'bg-accent/10'
-                )}>
-                  {isAI ? (
-                    <Bot className="w-4 h-4 text-primary" />
-                  ) : (
-                    <User className="w-4 h-4 text-accent" />
-                  )}
-                </div>
-              )}
             </div>
           );
         })}
