@@ -179,6 +179,16 @@ export function useChats() {
     },
   });
 
+  const resetUnread = async (chatId: string) => {
+    const { error } = await supabase
+      .rpc('reset_human_unread', { chat_id_param: chatId })
+    if (error) {
+      console.error('Reset unread failed:', error)
+    } else {
+      queryClient.invalidateQueries({ queryKey: ['chats'] })
+    }
+  }
+  
   // Subscribe to realtime changes for chats
   useEffect(() => {
     if (!currentWorkspaceId) {
