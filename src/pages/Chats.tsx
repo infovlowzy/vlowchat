@@ -242,7 +242,10 @@ export default function Chats() {
                 return (
                   <button
                     key={chat.id}
-                    onClick={() => setSelectedChatId(chat.id)}
+                    onClick={async () => {
+                      await resetUnread(chat.id)
+                      setSelectedChatId(chat.id)
+                    }}
                     className={cn(
                       'w-full p-4 text-left hover:bg-muted/50 transition-colors',
                       isSelected && 'bg-muted'
