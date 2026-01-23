@@ -774,7 +774,7 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
             </Button>
             <Button size="icon" onClick={handleSend}>
               <Send className="w-4 h-4" />
-              {isSending && <Spinner className="w-4 h-4 ml-1 animate-spin" />}
+              {isSending && <Loader2 className="w-4 h-4 ml-1 animate-spin" />}  {/* 👈 Loader2 */}
             </Button>
           </div>
         </div>
