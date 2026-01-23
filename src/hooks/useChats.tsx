@@ -254,5 +254,8 @@ export function useChats() {
     };
   }, [currentWorkspaceId, queryClient]);
 
-  return query;
+  return {
+    query,
+    resetUnread
+  };
 }
