@@ -414,9 +414,9 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
   };
   
   const handleSend = async () => {
+    const text = messageText.trim();
     if (!text || isSending) return; 
     setIsSending(true);
-    const text = messageText.trim()
   
     try {
       console.log("[ChatDetail] Refreshing session...")
