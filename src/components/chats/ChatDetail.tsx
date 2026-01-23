@@ -772,9 +772,16 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
             <Button size="icon" variant="outline">
               <Paperclip className="w-4 h-4" />
             </Button>
-            <Button size="icon" onClick={handleSend}>
-              <Send className="w-4 h-4" />
-              {isSending && <Loader2 className="w-4 h-4 ml-1 animate-spin" />}  {/* 👈 Loader2 */}
+            <Button 
+              size="icon" 
+              onClick={handleSend}
+              disabled={isSending || !messageText.trim()}
+            >
+              {isSending ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
             </Button>
           </div>
         </div>
