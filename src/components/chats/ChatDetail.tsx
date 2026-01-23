@@ -296,6 +296,7 @@ import { cn } from '@/lib/utils';
 import { mockQuickReplies } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
 import { useUpdateChatStatus } from '@/hooks/useChatStatus';
+import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   FunctionsHttpError,
@@ -773,6 +774,7 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
             </Button>
             <Button size="icon" onClick={handleSend}>
               <Send className="w-4 h-4" />
+              {isSending && <Spinner className="w-4 h-4 ml-1 animate-spin" />}
             </Button>
           </div>
         </div>
