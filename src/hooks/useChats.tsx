@@ -9,8 +9,9 @@ export function useChats() {
   const { currentWorkspaceId } = useWorkspace();
 
   const query = useQuery({
-    queryKey: ["chats"],
+    queryKey: ["chats", currentWorkspaceId],
     queryFn: async () => {
+      if (!currentWorkspaceId) return []; 
       const { data, error } = await supabase
         .from("chats")
         .select(`
@@ -35,6 +36,7 @@ export function useChats() {
             sender_type
           )
         `)
+        .eq('workspace_id', currentWorkspaceId)
         .order("last_message_at", { ascending: false, nullsFirst: false });
 
       if (error) throw error;
@@ -96,7 +98,7 @@ export function useChats() {
     if (error) {
       console.error('Reset unread failed:', error)
     } else {
-      queryClient.invalidateQueries({ queryKey: ['chats'] })
+      queryClient.invalidateQueries({ queryKey: ['chats', currentWorkspaceId] })
     }
   }
   
