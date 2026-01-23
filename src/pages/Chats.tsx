@@ -16,7 +16,7 @@ type AISubTab = 'all_ai' | 'needs_action';
 type OngoingSubTab = 'all' | 'unread';
 
 export default function Chats() {
-  const { data: chats = [], isLoading } = useChats();
+  const { data: chats = [], isLoading, resetUnread } = useChats();
   const [selectedTab, setSelectedTab] = useState<MainTabValue>('all');
   const [aiSubTab, setAISubTab] = useState<AISubTab>('all_ai');
   const [ongoingSubTab, setOngoingSubTab] = useState<OngoingSubTab>('all');
