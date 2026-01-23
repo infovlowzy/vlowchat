@@ -323,6 +323,7 @@ interface ChatDetailProps {
 export function ChatDetail({ chat, messages }: ChatDetailProps) {
   const [messageText, setMessageText] = useState('');
   const [isAdminMode, setIsAdminMode] = useState(chat.mode === 'admin');
+  const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
   const updateChatStatus = useUpdateChatStatus();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -412,8 +413,9 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
   };
   
   const handleSend = async () => {
+    if (!text || isSending) return; 
+    setIsSending(true);
     const text = messageText.trim()
-    if (!text) return
   
     try {
       console.log("[ChatDetail] Refreshing session...")
@@ -491,6 +493,9 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
         description: e?.message ?? "Unknown error",
         variant: "destructive",
       })
+    }
+    finally {
+      setIsSending(false);
     }
   }
   
