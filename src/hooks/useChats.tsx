@@ -72,6 +72,7 @@ export function useChats() {
 
         return {
           id: chat.id,
+          contact: chat.contact, 
           customerName,
           customerAvatar: null,
           channel,
@@ -157,7 +158,7 @@ export function useChats() {
         } else if (status === 'CHANNEL_ERROR') {
           console.error(`[Realtime] ❌ Channel error for chats`);
         } else if (status === 'TIMED_OUT') {
-          console.error(`[Realtime] ⏱️ Subscription timed out for chats`);
+          console.error(`[Realtime] ⏱️ Subscription timed out fofr chats`);
         }
       });
 
