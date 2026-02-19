@@ -304,6 +304,7 @@ import {
   FunctionsFetchError,
 } from "@supabase/supabase-js"
 
+
 interface ChatDetailChatViewModel {
   id: string;
   customerName: string;
@@ -332,6 +333,11 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
   const previousMessagesLengthRef = useRef(messages.length);
   const dayKey = (d: Date) =>
     d.toLocaleDateString("en-GB", { year: "numeric", month: "short", day: "2-digit" })
+
+  const isResolved = chat.status === 'resolved';
+  const isAIControlled = chat.status === 'ai';
+  const isInputDisabled = isResolved || isAIControlled;
+
   
   const ChannelIcon = chat.channel === 'whatsapp' ? MessageSquare : Globe;
 
@@ -734,10 +740,84 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
 
       {/* Input */}
 
+      {/* Input */}
+<div className="p-4 border-t space-y-3">
+
+  {/* Status Banner */}
+  {isInputDisabled && (
+    <Alert>
+      <AlertCircle className="h-4 w-4" />
+      <AlertDescription>
+        {isResolved
+          ? "This conversation has been resolved. Messaging is disabled."
+          : "This conversation is currently handled by AI. Escalate to Human to reply."}
+      </AlertDescription>
+    </Alert>
+  )}
+
+  <div className="flex items-center gap-2">
+    <Select value="" onValueChange={(value) => setMessageText(value)} disabled={isInputDisabled}>
+      <SelectTrigger className="w-48">
+        <SelectValue placeholder="Quick replies" />
+      </SelectTrigger>
+      <SelectContent>
+        {mockQuickReplies.map((reply) => (
+          <SelectItem key={reply.id} value={reply.content}>
+            {reply.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+  
+  <div className="flex items-end gap-2">
+    <div className="flex-1">
+      <Textarea
+        value={messageText}
+        onChange={(e) => setMessageText(e.target.value)}
+        placeholder={
+          isResolved
+            ? "Conversation resolved."
+            : isAIControlled
+            ? "AI is currently handling this conversation."
+            : "Type your message..."
+        }
+        disabled={isInputDisabled}
+        className="min-h-[80px] resize-none"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && !isInputDisabled) {
+            e.preventDefault();
+            handleSend();
+          }
+        }}
+      />
+    </div>
+    
+    <div className="flex flex-col gap-2">
+      <Button size="icon" variant="outline" disabled={isInputDisabled}>
+        <Smile className="w-4 h-4" />
+      </Button>
+      <Button size="icon" variant="outline" disabled={isInputDisabled}>
+        <Paperclip className="w-4 h-4" />
+      </Button>
+      <Button 
+        size="icon" 
+        onClick={handleSend}
+        disabled={isSending || !messageText.trim() || isInputDisabled}
+      >
+        {isSending ? (
+          <Loader2 className="w-4 h-4 animate-spin" />
+        ) : (
+          <Send className="w-4 h-4" />
+        )}
+      </Button>
+    </div>
+  </div>
+</div>
 
 
       
-     <div className="p-4 border-t space-y-2">
+     {/* <div className="p-4 border-t space-y-2">
         <div className="flex items-center gap-2">
           <Select value="" onValueChange={(value) => setMessageText(value)}>
             <SelectTrigger className="w-48">
@@ -789,7 +869,7 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
             </Button>
           </div>
         </div>
-      </div>
+      </div> */}
     </Card>
   );
 }
