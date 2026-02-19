@@ -326,6 +326,7 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
   const [messageText, setMessageText] = useState('');
   const [isAdminMode, setIsAdminMode] = useState(chat.mode === 'admin');
   const [isSending, setIsSending] = useState(false);
+  const [isInvoiceDialogOpen, setIsInvoiceDialogOpen] = useState(false);
   const { toast } = useToast();
   const updateChatStatus = useUpdateChatStatus();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -588,13 +589,25 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
           
           {/* Resolve button - show for Ongoing (human) chats */}
           {chat.status === 'human' && (
-            <Button onClick={handleResolve} size="sm">
-              <Check className="w-4 h-4 mr-2" />
-              Resolve
-            </Button>
+            <>
+              <Button onClick={handleResolve} size="sm">
+                <Check className="w-4 h-4 mr-2" />
+                Resolve
+              </Button>
+        
+              {/* NEW: Create Invoice button – human mode only */}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsInvoiceDialogOpen(true)}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Create Invoice
+              </Button>
+            </>
           )}
           
-          {/* Take Over button - show when not in admin mode and not resolved */}
+          {/* Take Over button - show when not in admin mode and not resolved/human */}
           {!isAdminMode && chat.status !== 'resolved' && chat.status !== 'human' && (
             <Button onClick={handleTakeOver} size="sm" variant="outline">
               <User className="w-4 h-4 mr-2" />
@@ -812,7 +825,7 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
         )}
       </Button>
     </div>
-  </div>
+  </div>\
 </div>
 
 
@@ -870,6 +883,13 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
           </div>
         </div>
       </div> */}
+      
+      <InvoiceCreateDialog
+        open={isInvoiceDialogOpen}
+        onOpenChange={setIsInvoiceDialogOpen}
+        chat={chat}
+      />
+      
     </Card>
   );
 }
