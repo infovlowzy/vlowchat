@@ -589,7 +589,7 @@ export default function Chats() {
                       
                       <div className="flex-1 min-w-0">
                             
-                        <div className="flex items-center justify-between mb-1">
+                        {/* <div className="flex items-center justify-between mb-1">
                           <span className="font-medium truncate">{chat.customerName}</span>
                           <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
                             {new Date(chat.lastMessageTime).toLocaleTimeString('en-US', { 
@@ -597,7 +597,8 @@ export default function Chats() {
                               minute: '2-digit' 
                             })}
                           </span>
-                        </div>
+                        </div> */}
+                            
 
                                           {/* <div className="flex items-start justify-between mb-1">
                     <div className="min-w-0">
@@ -621,6 +622,31 @@ export default function Chats() {
                         : ''}
                     </span>
                   </div> */}
+
+                            
+
+                            <div className="flex items-center justify-between mb-1">
+  <div className="flex flex-col min-w-0">
+    <span className="font-medium truncate">
+      {chat.contact?.display_name || chat.contact?.phone_number || 'Unknown'}
+    </span>
+
+    {chat.contact?.display_name && (
+      <span className="text-xs text-muted-foreground truncate">
+        {chat.contact?.phone_number}
+      </span>
+    )}
+  </div>
+
+  <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
+    {chat.lastMessageTime &&
+      new Date(chat.lastMessageTime).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })}
+  </span>
+</div>
+
 
 
                             
