@@ -825,7 +825,7 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
         )}
       </Button>
     </div>
-  </div>\
+  </div>
 </div>
 
 
