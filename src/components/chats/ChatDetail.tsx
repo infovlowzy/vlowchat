@@ -732,85 +732,12 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
         </div>
       </div>
 
-      // 👇 ADD THIS - Disable logic
-const isInputDisabled = chat.status === 'ai' || chat.status === 'resolved';
-
       {/* Input */}
 
 
-      {!isInputDisabled ? (
-  <div className="p-4 border-t space-y-2">
-    <div className="flex items-center gap-2">
-      <Select value="" onValueChange={(value) => setMessageText(value)}>
-        <SelectTrigger className="w-48">
-          <SelectValue placeholder="Quick replies" />
-        </SelectTrigger>
-        <SelectContent>
-          {mockQuickReplies.map((reply) => (
-            <SelectItem key={reply.id} value={reply.content}>
-              {reply.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-    
-    <div className="flex items-end gap-2">
-      <div className="flex-1">
-        <Textarea
-          value={messageText}
-          onChange={(e) => setMessageText(e.target.value)}
-          placeholder="Type your message..."
-          className="min-h-[80px] resize-none"
-          disabled={isSending}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-        />
-      </div>
-      
-      <div className="flex flex-col gap-2">
-        <Button size="icon" variant="outline">
-          <Smile className="w-4 h-4" />
-        </Button>
-        <Button size="icon" variant="outline">
-          <Paperclip className="w-4 h-4" />
-        </Button>
-        <Button 
-          size="icon" 
-          onClick={handleSend}
-          disabled={isSending || !messageText.trim()}
-        >
-          {isSending ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <Send className="w-4 h-4" />
-          )}
-        </Button>
-      </div>
-    </div>
-  </div>
-) : (
-  <div className="p-6 border-t bg-muted/50 text-center">
-    <Bot className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-60" />
-    <p className="text-sm text-muted-foreground mb-1">
-      {chat.status === 'ai' 
-        ? '🤖 AI is handling this conversation' 
-        : '✅ Chat resolved - no further action needed'
-      }
-    </p>
-    <p className="text-xs text-muted-foreground/70">
-      Use Escalate or Resolve buttons above if needed
-    </p>
-  </div>
-)}
-
 
       
-      {/* <div className="p-4 border-t space-y-2">
+     <div className="p-4 border-t space-y-2">
         <div className="flex items-center gap-2">
           <Select value="" onValueChange={(value) => setMessageText(value)}>
             <SelectTrigger className="w-48">
@@ -862,7 +789,7 @@ const isInputDisabled = chat.status === 'ai' || chat.status === 'resolved';
             </Button>
           </div>
         </div>
-      </div> */}
+      </div>
     </Card>
   );
 }
