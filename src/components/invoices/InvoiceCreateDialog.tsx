@@ -29,7 +29,8 @@ interface InvoiceCreateDialogProps {
 interface DraftItem {
   id: string;
   name: string;
-  price: string; // string for input
+  price: string;     // string for input
+  quantity: string;  // string for input
 }
 
 export function InvoiceCreateDialog({
@@ -39,21 +40,39 @@ export function InvoiceCreateDialog({
 }: InvoiceCreateDialogProps) {
   const [notes, setNotes] = useState("");
   const [items, setItems] = useState<DraftItem[]>([]);
+  const [discount, setDiscount] = useState<string>("0");
+  const [tax, setTax] = useState<string>("0");
   const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
 
   const code = useMemo(() => {
-    // You can replace this with a sequence or server-side generator later
     return `INV-${chat.id.slice(0, 4).toUpperCase()}-${new Date()
       .toISOString()
       .slice(2, 10)
       .replace(/-/g, "")}`;
   }, [chat.id]);
 
-  const subtotal = useMemo(
-    () =>
-      items.reduce((sum, item) => sum + (Number(item.price) || 0), 0),
-    [items]
+  const subtotal = useMemo(() => {
+    return items.reduce((sum, item) => {
+      const price = Number(item.price) || 0;
+      const qty = Number(item.quantity) || 0;
+      return sum + price * qty;
+    }, 0);
+  }, [items]);
+
+  const discountAmount = useMemo(
+    () => Number(discount) || 0,
+    [discount]
+  );
+
+  const taxAmount = useMemo(
+    () => Number(tax) || 0,
+    [tax]
+  );
+
+  const total = useMemo(
+    () => subtotal - discountAmount + taxAmount,
+    [subtotal, discountAmount, taxAmount]
   );
 
   const formatCurrency = (amount: number) =>
@@ -66,6 +85,8 @@ export function InvoiceCreateDialog({
   const resetForm = () => {
     setNotes("");
     setItems([]);
+    setDiscount("0");
+    setTax("0");
   };
 
   const handleClose = (nextOpen: boolean) => {
@@ -80,13 +101,14 @@ export function InvoiceCreateDialog({
         id: crypto.randomUUID(),
         name: "",
         price: "",
+        quantity: "1",
       },
     ]);
   };
 
   const handleItemChange = (
     id: string,
-    field: "name" | "price",
+    field: keyof DraftItem,
     value: string
   ) => {
     setItems((prev) =>
@@ -104,7 +126,7 @@ export function InvoiceCreateDialog({
     if (!items.length) {
       toast({
         title: "Add at least one item",
-        description: "Please add at least one line item with a price.",
+        description: "Please add at least one line item.",
         variant: "destructive",
       });
       return;
@@ -112,7 +134,7 @@ export function InvoiceCreateDialog({
     if (subtotal <= 0) {
       toast({
         title: "Amount must be > 0",
-        description: "Please enter valid prices for your items.",
+        description: "Please enter valid prices and quantities.",
         variant: "destructive",
       });
       return;
@@ -120,7 +142,6 @@ export function InvoiceCreateDialog({
 
     setIsSending(true);
     try {
-      // 1) Insert invoice
       const { data: invoice, error: invErr } = await supabase
         .from("invoices")
         .insert({
@@ -128,33 +149,36 @@ export function InvoiceCreateDialog({
           chat_id: chat.id,
           contact_id: chat.contactId,
           created_by_type: "human",
-          // created_by_user_id: current user id if you have it
           status: "waiting_for_payment",
           invoice_number: code,
           currency_code: "IDR",
           subtotal_amount: subtotal,
-          discount_amount: 0,
-          tax_amount: 0,
-          total_amount: subtotal,
-          // you can store notes in a custom field later if needed
+          discount_amount: discountAmount,
+          tax_amount: taxAmount,
+          total_amount: total,
         })
         .select("*")
         .maybeSingle();
 
       if (invErr) throw invErr;
-      if (!invoice) throw new Error("Failed to create invoice record");
+      if (!invoice) throw new Error("Failed to create invoice");
 
-      // 2) Insert invoice items
-      const itemsPayload = items.map((item) => ({
-        invoice_id: invoice.id,
-        name: item.name || "Item",
-        description: null,
-        unit_price: Number(item.price) || 0,
-        quantity: 1,
-        discount_type: "none",
-        discount_value: 0,
-        line_total: Number(item.price) || 0,
-      }));
+      const itemsPayload = items.map((item) => {
+        const price = Number(item.price) || 0;
+        const qty = Number(item.quantity) || 0;
+        const lineTotal = price * qty;
+
+        return {
+          invoice_id: invoice.id,
+          name: item.name || "Item",
+          description: null,
+          unit_price: price,
+          quantity: qty,
+          discount_type: "none",
+          discount_value: 0,
+          line_total: lineTotal,
+        };
+      });
 
       const { error: itemsErr } = await supabase
         .from("invoice_items")
@@ -190,7 +214,7 @@ export function InvoiceCreateDialog({
         </DialogHeader>
 
         <div className="space-y-6 py-2">
-          {/* Header: code + date */}
+          {/* Header */}
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-xl font-bold">{code}</h2>
@@ -236,7 +260,7 @@ export function InvoiceCreateDialog({
                 {items.map((item) => (
                   <div
                     key={item.id}
-                    className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto] gap-2 items-center"
+                    className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto] gap-2 items-center"
                   >
                     <div className="space-y-1">
                       <Label className="text-xs">Item</Label>
@@ -245,6 +269,18 @@ export function InvoiceCreateDialog({
                         value={item.name}
                         onChange={(e) =>
                           handleItemChange(item.id, "name", e.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Qty</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        placeholder="1"
+                        value={item.quantity}
+                        onChange={(e) =>
+                          handleItemChange(item.id, "quantity", e.target.value)
                         }
                       />
                     </div>
@@ -279,11 +315,35 @@ export function InvoiceCreateDialog({
             <Label htmlFor="invoice-notes">Notes (optional)</Label>
             <Textarea
               id="invoice-notes"
-              placeholder="Add notes or terms; can be shown in preview later."
+              placeholder="Notes or terms to show on the invoice."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="min-h-[80px] resize-none"
             />
+          </div>
+
+          {/* Discount & Tax */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label htmlFor="invoice-discount">Discount (IDR)</Label>
+              <Input
+                id="invoice-discount"
+                type="number"
+                min={0}
+                value={discount}
+                onChange={(e) => setDiscount(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="invoice-tax">Tax (IDR)</Label>
+              <Input
+                id="invoice-tax"
+                type="number"
+                min={0}
+                value={tax}
+                onChange={(e) => setTax(e.target.value)}
+              />
+            </div>
           </div>
 
           {/* Totals */}
@@ -292,10 +352,24 @@ export function InvoiceCreateDialog({
               <span className="text-muted-foreground">Subtotal</span>
               <span>{formatCurrency(subtotal)}</span>
             </div>
+            {discountAmount > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Discount</span>
+                <span className="text-green-600">
+                  -{formatCurrency(discountAmount)}
+                </span>
+              </div>
+            )}
+            {taxAmount > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Tax</span>
+                <span>{formatCurrency(taxAmount)}</span>
+              </div>
+            )}
             <Separator />
             <div className="flex justify-between text-base font-bold">
               <span>Total</span>
-              <span>{formatCurrency(subtotal)}</span>
+              <span>{formatCurrency(total)}</span>
             </div>
           </div>
 
