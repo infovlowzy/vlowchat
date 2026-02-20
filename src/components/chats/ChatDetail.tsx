@@ -318,8 +318,17 @@ interface ChatDetailChatViewModel {
   firstSeen: string | null;
   totalChats: number;
   tags: string[];
-  auto_resolve_sent?: boolean;  // ← TAMBAH INI
+  auto_resolve_sent?: boolean;
+
+  // for invoices
+  workspaceId: string;
+  contact?: {
+    id: string;
+    display_name: string;
+    phone_number: string | null;
+  };
 }
+
 
 interface ChatDetailProps {
   chat: ChatDetailChatViewModel;
