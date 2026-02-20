@@ -23,6 +23,8 @@ export function useChats() {
           unread_count_for_human,
           last_message_at,
           created_at,
+          auto_resolve_sent,
+          resolved_at, 
           contact:contacts (
             id,
             display_name,
