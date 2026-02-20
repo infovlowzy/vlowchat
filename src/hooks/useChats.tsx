@@ -90,6 +90,8 @@ export function useChats() {
           notes: "",
           firstSeen: chat.created_at,
           totalChats: messages.length,
+          auto_resolve_sent: chat.auto_resolve_sent ?? false,
+          resolved_at: chat.resolved_at, 
         };
       });
     },
