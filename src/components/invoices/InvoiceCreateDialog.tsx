@@ -17,12 +17,13 @@ import { supabase } from "@/integrations/supabase/client";
 interface InvoiceCreateDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  chat: {
-    id: string;
+  chat: ChatDetailChatViewModel & {
+    contact?: {
+      id: string;
+      display_name: string;
+      phone_number: string | null;
+    };
     workspaceId: string;
-    contactId: string;
-    customerName: string;
-    contactPhone?: string | null;
   };
 }
 
@@ -232,10 +233,10 @@ export function InvoiceCreateDialog({
           <div className="bg-muted/50 rounded-lg p-4">
             <p className="text-sm text-muted-foreground mb-1">Bill To:</p>
             <p className="font-semibold">
-              {chat.customerName || "Customer"}
+              {chat.contact?.display_name || chat.customerName || "Customer"}
             </p>
             <p className="text-sm text-muted-foreground">
-              {chat.contactPhone || "+62••••••••••"}
+              {chat.contact?.phone_number || "+62••••••••••"}
             </p>
           </div>
 
