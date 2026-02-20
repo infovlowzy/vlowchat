@@ -304,6 +304,8 @@ import {
   FunctionsRelayError,
   FunctionsFetchError,
 } from "@supabase/supabase-js"
+import { MessageSquare, Globe, Bot, User, Send, Smile, Paperclip, ExternalLink, Check, AlertCircle, ArrowUp, Clock } from 'lucide-react';
+
 
 
 interface ChatDetailChatViewModel {
@@ -316,6 +318,7 @@ interface ChatDetailChatViewModel {
   firstSeen: string | null;
   totalChats: number;
   tags: string[];
+  auto_resolve_sent?: boolean;  // ← TAMBAH INI
 }
 
 interface ChatDetailProps {
@@ -575,6 +578,15 @@ export function ChatDetail({ chat, messages }: ChatDetailProps) {
                chat.status === 'resolved' ? 'Resolved' : 
                'AI'}
             </Badge>
+
+
+             {chat.auto_resolve_sent && (
+    <Badge variant="secondary" className="gap-1">
+      <Clock className="w-3 h-3" />
+      Auto-resolved
+    </Badge>
+  )}
+            
           </div>
         </div>
 
