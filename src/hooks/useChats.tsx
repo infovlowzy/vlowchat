@@ -92,6 +92,9 @@ export function useChats() {
           totalChats: messages.length,
           auto_resolve_sent: chat.auto_resolve_sent ?? false,
           resolved_at: chat.resolved_at, 
+          workspaceId: chat.workspace_id,
+          contactId: chat.contact_id,
+          contact: chat.contact,
         };
       });
     },
